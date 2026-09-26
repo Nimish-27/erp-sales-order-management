@@ -107,7 +107,6 @@ export const confirmSalesOrder = async (orderId, userId) => {
     // 8. Create Reservation audit rows (one per order item)
     const reservationRows = order.items.map((item) => ({
       productId: item.productId,
-      orderItemId: item.id, // optional FK if you added one; otherwise omit
       quantity: item.quantity,
       status: 'CONFIRMED',
       userId,

@@ -1,6 +1,5 @@
 import { asyncHandler } from '../../middlewares/asyncHandler.js';
 import * as reservationService from './reservation.service.js';
-import { orderService } from '../orders/order.service.js';
 
 export const confirmOrder = asyncHandler(async (req, res) => {
   const order = await reservationService.confirmSalesOrder(req.params.id, req.user.id);

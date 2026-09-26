@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { authorize } from '../../middlewares/auth.js';
 import { asyncHandler } from '../../middlewares/asyncHandler.js';
 import { z } from 'zod';
-import { validate } from './reservation.validator.js';
 import * as ctrl from './reservation.controller.js';
 
 const router = Router();

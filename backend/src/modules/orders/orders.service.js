@@ -84,6 +84,7 @@ export const orderService = {
         quotation: { include: { items: { include: { product: true } } } },
         items: { include: { product: true } },
         dispatches: { include: { items: { include: { product: true } } } },
+        reservations: true,
       },
     });
     if (!order) throw httpError(404, 'Sales order not found', 'ORDER_NOT_FOUND');
