@@ -1,93 +1,106 @@
-import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/db.js';
+import { orderRepository } from './order.repository.js';
 import { httpError } from '../../shared/errors.js';
-import { reserveStockTx } from '../inventory/inventory.repository.js';
+import { Prisma } from '@prisma/client';
 
-const DISCOUNTS = {
-  'SAVE10': { type: 'percent', value: new Prisma.Decimal('0.10') },
-  'FLAT50': { type: 'flat',    value: new Prisma.Decimal('50.00') },
+// Allowed transitions for SalesOrder
+const TRANSITIONS = {
+  CREATED:    ['CONFIRMED', 'CANCELLED'],
+  CONFIRMED:  ['DISPATCHED', 'CANCELLED'],
+  DISPATCHED: ['DELIVERED'],
+  DELIVERED:  [], // terminal
+  CANCELLED:  [], // terminal
 };
 
-export const createOrderTx = async ({ userId, items, discountCode }) => {
-  // 1. Reserve stock for each item (in its own tx; partial failure handled)
-  const reservations = [];
-  for (const item of items) {
-    try {
-      const r = await reserveStockTx({
-        productId: item.productId,
-        userId,
-        quantity: item.quantity,
-      });
-      reservations.push(r);
-    } catch (err) {
-      // rollback already-created reservations
-      await Promise.allSettled(
-        reservations.map((r) => releaseReservationTx({ reservationId: r.id, userId }))
+export const orderService = {
+  /**
+   * Convert an ACCEPTED quotation into a Sales Order.
+   *
+   * Guard clauses (in order):
+   * 1. Quotation must exist
+   * 2. Quotation.status === 'ACCEPTED'
+   * 3. No existing sales_order for this quotation_id (explicit pre-check)
+   *    — DB UNIQUE on sales_orders.quotation_id is the backstop
+   */
+  async convertFromQuotation(quotationId, userId) {
+    // Guard 1: Quotation must exist
+    const quotation = await prisma.quotation.findUnique({
+      where: { id: quotationId },
+      include: {
+        items: { include: { product: true } },
+        customer: true,
+      },
+    });
+    if (!quotation) {
+      throw httpError(404, 'Quotation not found', 'QUOTATION_NOT_FOUND');
+    }
+
+    // Guard 2: Must be ACCEPTED
+    if (quotation.status !== 'ACCEPTED') {
+      throw httpError(
+        409,
+        `Cannot convert quotation in status ${quotation.status}. Only ACCEPTED quotations can be converted.`,
+        'QUOTATION_NOT_ACCEPTED'
       );
+    }
+
+    // Guard 3: Pre-check for existing order (clean error before hitting DB constraint)
+    const existing = await orderRepository.findByQuotationId(quotationId);
+    if (existing) {
+      throw httpError(
+        409,
+        `Sales order already exists for this quotation: ${existing.orderNumber}`,
+        'ORDER_ALREADY_EXISTS'
+      );
+    }
+
+    // Generate order number and create (DB UNIQUE catches any race)
+    const orderNumber = await orderRepository.generateOrderNumber(prisma);
+    try {
+      const order = await orderRepository.createFromQuotation(quotation, orderNumber);
+      return order;
+    } catch (err) {
+      // P2002 = Prisma unique constraint violation
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw httpError(
+          409,
+          'Sales order already exists for this quotation (race condition caught)',
+          'ORDER_ALREADY_EXISTS'
+        );
+      }
       throw err;
     }
-  }
+  },
 
-  try {
-    // 2. Build order with money math in Decimal
-    const productIds = items.map((i) => i.productId);
-    const products = await prisma.product.findMany({
-      where: { id: { in: productIds } },
-    });
-    const productMap = new Map(products.map((p) => [p.id, p]));
+  async list(filters) {
+    return orderRepository.findAll(filters);
+  },
 
-    let subtotal = new Prisma.Decimal(0);
-    const orderItemsData = items.map((item) => {
-      const p = productMap.get(item.productId);
-      if (!p) throw httpError(404, `Product ${item.productId} not found`);
-      const lineTotal = new Prisma.Decimal(p.price).mul(item.quantity);
-      subtotal = subtotal.add(lineTotal);
-      return {
-        productId: item.productId,
-        quantity: item.quantity,
-        unitPrice: p.price,
-      };
-    });
-
-    // 3. Discount
-    let discountAmt = new Prisma.Decimal(0);
-    if (discountCode) {
-      const d = DISCOUNTS[discountCode];
-      if (!d) throw httpError(400, 'Invalid discount code');
-      discountAmt = d.type === 'percent'
-        ? subtotal.mul(d.value)
-        : Prisma.Decimal.min(d.value, subtotal);
-    }
-    const afterDiscount = subtotal.sub(discountAmt);
-
-    // 4. GST on discounted amount
-    const gst = afterDiscount.mul('0.18').toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-    const total = afterDiscount.add(gst).toDecimalPlaces(2);
-
-    // 5. Persist
-    const order = await prisma.order.create({
-      data: {
-        userId,
-        subtotal: subtotal.toDecimalPlaces(2),
-        gstAmount: gst,
-        total,
-        discountCode: discountCode || null,
-        discountAmt: discountAmt.toDecimalPlaces(2),
-        items: { create: orderItemsData },
-      },
-      include: { items: true },
-    });
-
-    // 6. Link reservations → confirm them (converts soft-lock to hard deduction)
-    await Promise.all(
-      reservations.map((r) => confirmReservationTx({ reservationId: r.id, userId }))
-    );
-
+  async getById(id) {
+    const order = await orderRepository.findById(id);
+    if (!order) throw httpError(404, 'Sales order not found', 'ORDER_NOT_FOUND');
     return order;
-  } catch (err) {
-    await Promise.allSettled(
-      reservations.map((r) => releaseReservationTx({ reservationId: r.id, userId }))
-    );
-    throw err;
-  }
+  },
+
+  async transitionStatus(id, newStatus, userRole) {
+    const order = await orderRepository.findById(id);
+    if (!order) throw httpError(404, 'Sales order not found', 'ORDER_NOT_FOUND');
+
+    // Check transition
+    const allowed = TRANSITIONS[order.status];
+    if (!allowed || !allowed.includes(newStatus)) {
+      throw httpError(
+        409,
+        `Invalid status transition: ${order.status} → ${newStatus}. Allowed: ${allowed?.join(', ') || 'none'}`,
+        'INVALID_TRANSITION'
+      );
+    }
+
+    // Role gate for sensitive transitions
+    if (newStatus === 'CANCELLED' && userRole !== 'ADMIN') {
+      throw httpError(403, 'Only ADMIN can cancel orders', 'INSUFFICIENT_ROLE');
+    }
+
+    return orderRepository.updateStatus(id, newStatus);
+  },
 };
