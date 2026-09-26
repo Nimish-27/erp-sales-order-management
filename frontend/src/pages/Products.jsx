@@ -18,6 +18,7 @@ export const Products = () => {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const load = async () => {
     try {
@@ -28,7 +29,7 @@ export const Products = () => {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [refreshKey]);
 
   const updateField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
@@ -70,7 +71,7 @@ export const Products = () => {
       <div className="flex" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
         <h1>Products</h1>
         <div className="flex">
-          <button className="secondary" onClick={load}>Refresh</button>
+          <button className="secondary" onClick={() => setRefreshKey((k) => k + 1)}>Refresh</button>
           <button onClick={() => setShowForm(!showForm)}>{showForm ? 'Cancel' : '+ New Product'}</button>
         </div>
       </div>

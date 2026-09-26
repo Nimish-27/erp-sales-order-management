@@ -83,6 +83,7 @@ model Customer {
   mobile        String?
   email         String?
   city          String?
+  isActive      Boolean  @default(true) @map("is_active")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -235,7 +236,7 @@ model SalesOrder {
   updatedAt     DateTime    @updatedAt @map("updated_at")
 
   items     SalesOrderItem[]
-  dispatches Dispatch[]
+  dispatch     Dispatch?
   reservations Reservation[]
 
   @@index([customerId])
@@ -282,7 +283,7 @@ model SalesOrderItem {
 model Dispatch {
   id              String         @id @default(uuid())
   dispatchNumber  String         @unique @map("dispatch_number")
-  salesOrderId    String         @map("sales_order_id")
+  salesOrderId    String         @unique @map("sales_order_id")
   salesOrder      SalesOrder     @relation(fields: [salesOrderId], references: [id])
   dispatchDate    DateTime       @default(now()) @map("dispatch_date")
   vehicleNumber   String?        @map("vehicle_number")
@@ -294,7 +295,6 @@ model Dispatch {
 
   items DispatchItem[]
 
-  @@index([salesOrderId])
   @@index([status])
   @@map("dispatches")
 }

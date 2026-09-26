@@ -3,13 +3,14 @@ import { orderRepository } from './order.repository.js';
 import { httpError } from '../../shared/errors.js';
 import { Prisma } from '@prisma/client';
 
-// Allowed transitions for SalesOrder
+// Allowed transitions — CONFIRMED is no longer reachable via status patch;
+// it is set exclusively by POST /orders/:id/confirm (ADMIN + inventory reservation)
 const TRANSITIONS = {
-  CREATED:    ['CONFIRMED', 'CANCELLED'],
+  CREATED:    ['CANCELLED'],
   CONFIRMED:  ['DISPATCHED', 'CANCELLED'],
   DISPATCHED: ['DELIVERED'],
-  DELIVERED:  [], // terminal
-  CANCELLED:  [], // terminal
+  DELIVERED:  [],
+  CANCELLED:  [],
 };
 
 export const orderService = {

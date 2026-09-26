@@ -4,6 +4,7 @@ import { Enquiries } from './pages/Enquiries.jsx';
 import { Quotations } from './pages/Quotations.jsx';
 import { Orders } from './pages/Orders.jsx';
 import { Products } from './pages/Products.jsx';
+import { Customers } from './pages/Customers.jsx';
 import { Layout } from './components/Layout.jsx';
 import { RequireAuth } from './auth/RequireAuth.jsx';
 
@@ -15,6 +16,7 @@ const App = () => (
       <Route path="/quotations" element={<Quotations />} />
       <Route path="/orders" element={<Orders />} />
       <Route path="/products" element={<Products />} />
+      <Route path="/customers" element={<Customers />} />
     </Route>
     <Route path="*" element={<Navigate to="/enquiries" replace />} />
   </Routes>

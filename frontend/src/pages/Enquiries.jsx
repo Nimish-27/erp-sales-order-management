@@ -11,6 +11,7 @@ export const Enquiries = () => {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Form state
   const [customerId, setCustomerId] = useState('');
@@ -33,7 +34,7 @@ export const Enquiries = () => {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [refreshKey]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -74,9 +75,12 @@ export const Enquiries = () => {
     <>
       <div className="flex" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
         <h1>Enquiries</h1>
-        {canWrite && <button onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Cancel' : '+ New Enquiry'}
-        </button>}
+        <div className="flex">
+          <button className="secondary" onClick={() => setRefreshKey((k) => k + 1)}>Refresh</button>
+          {canWrite && <button onClick={() => setShowForm(!showForm)}>
+            {showForm ? 'Cancel' : '+ New Enquiry'}
+          </button>}
+        </div>
       </div>
 
       {error && <div className="error">{error}</div>}

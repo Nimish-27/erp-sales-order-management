@@ -14,11 +14,18 @@ export const Layout = () => {
     <div className="app">
       <header>
         <nav>
-          <NavLink to="/enquiries" className={({ isActive }) => isActive ? 'active' : ''}>Enquiries</NavLink>
-          <NavLink to="/quotations" className={({ isActive }) => isActive ? 'active' : ''}>Quotations</NavLink>
+          {user?.role !== 'WAREHOUSE' && (
+            <>
+              <NavLink to="/enquiries" className={({ isActive }) => isActive ? 'active' : ''}>Enquiries</NavLink>
+              <NavLink to="/quotations" className={({ isActive }) => isActive ? 'active' : ''}>Quotations</NavLink>
+            </>
+          )}
           <NavLink to="/orders" className={({ isActive }) => isActive ? 'active' : ''}>Orders</NavLink>
           {user?.role === 'ADMIN' && (
-            <NavLink to="/products" className={({ isActive }) => isActive ? 'active' : ''}>Products</NavLink>
+            <>
+              <NavLink to="/products" className={({ isActive }) => isActive ? 'active' : ''}>Products</NavLink>
+              <NavLink to="/customers" className={({ isActive }) => isActive ? 'active' : ''}>Customers</NavLink>
+            </>
           )}
         </nav>
         <div className="flex">

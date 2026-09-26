@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../../config/db.js';
+import { Prisma } from '@prisma/client';
 import { authorize } from '../../middlewares/auth.js';
 import { asyncHandler } from '../../middlewares/asyncHandler.js';
 import { httpError } from '../../shared/errors.js';
@@ -9,7 +10,7 @@ const router = Router();
 
 router.post(
 	'/sales-orders/:id/dispatch',
-	authorize('ADMIN', 'SALES', 'WAREHOUSE'),
+	authorize('ADMIN'),
 	asyncHandler(async (req, res) => {
 		const parsed = z.object({ id: z.string().uuid() }).safeParse(req.params);
 		if (!parsed.success) {
@@ -30,7 +31,24 @@ router.post(
 			const existing = await tx.dispatch.findFirst({ where: { salesOrderId: order.id } });
 			if (existing) throw httpError(409, 'Sales order is already dispatched', 'DISPATCH_ALREADY_EXISTS');
 
-			for (const item of order.items) {
+			// Lock inventory rows in deterministic order, then verify reservedQty >= requested
+			const sortedItems = [...order.items].sort((a, b) => a.productId.localeCompare(b.productId));
+			const failures = [];
+			for (const item of sortedItems) {
+				const rows = await tx.$queryRaw(
+					Prisma.sql`SELECT "physical_qty" AS "physicalQty", "reserved_qty" AS "reservedQty"
+					           FROM "inventory" WHERE "product_id" = ${item.productId} FOR UPDATE`
+				);
+				if (rows.length === 0) throw httpError(404, `Inventory not found for product ${item.productId}`, 'INVENTORY_NOT_FOUND');
+				const inv = rows[0];
+				if (Number(inv.reservedQty) < item.quantity) {
+					const product = await tx.product.findUnique({ where: { id: item.productId }, select: { productCode: true } });
+					failures.push({ productCode: product?.productCode || item.productId, requested: item.quantity, reserved: Number(inv.reservedQty) });
+				}
+			}
+			if (failures.length > 0) throw httpError(409, 'Dispatch quantity exceeds reserved stock', 'INSUFFICIENT_RESERVED', { failures });
+
+			for (const item of sortedItems) {
 				await tx.inventory.update({
 					where: { productId: item.productId },
 					data: {

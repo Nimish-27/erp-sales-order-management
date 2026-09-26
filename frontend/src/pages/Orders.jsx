@@ -5,11 +5,12 @@ import { useAuth } from '../auth/AuthContext.jsx';
 export const Orders = () => {
   const { user } = useAuth();
   const canConfirm = user?.role === 'ADMIN';
-  const canDispatch = ['ADMIN', 'SALES', 'WAREHOUSE'].includes(user?.role);
+  const canDispatch = user?.role === 'ADMIN';
   const [orders, setOrders] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Dispatch form state
   const [dispatchOrderId, setDispatchOrderId] = useState(null);
@@ -31,7 +32,7 @@ export const Orders = () => {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [refreshKey]);
 
   const inventoryMap = new Map(inventory.map((i) => [i.productId, i]));
 
@@ -88,7 +89,7 @@ export const Orders = () => {
     <>
       <div className="flex" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
         <h1>Sales Orders</h1>
-        <button className="secondary" onClick={load}>Refresh</button>
+        <button className="secondary" onClick={() => setRefreshKey((k) => k + 1)}>Refresh</button>
       </div>
 
       {error && <div className="error">{error}</div>}

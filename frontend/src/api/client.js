@@ -54,7 +54,7 @@ export const api = {
   getOrder:        (id) => request(`/orders/${id}`),
   convertQuotationToOrder: (id) =>
     request(`/orders/quotations/${id}/convert`, { method: 'POST' }),
-  confirmOrder:    (id) => request(`/inventory/orders/${id}/confirm`, { method: 'POST' }),
+  confirmOrder:    (id) => request(`/orders/${id}/confirm`, { method: 'POST' }),
   dispatchOrder:   (id, data) =>
     request(`/dispatches/sales-orders/${id}/dispatch`, { method: 'POST', body: data }),
 
@@ -67,4 +67,7 @@ export const api = {
   updateProduct:  (id, data) => request(`/products/${id}`, { method: 'PATCH', body: data }),
   deleteProduct:  (id) => request(`/products/${id}`, { method: 'DELETE' }),
   listCustomers:   () => request('/customers'),
+  createCustomer: (data) => request('/customers', { method: 'POST', body: data }),
+  updateCustomer: (id, data) => request(`/customers/${id}`, { method: 'PATCH', body: data }),
+  deactivateCustomer: (id) => request(`/customers/${id}`, { method: 'DELETE' }),
 };

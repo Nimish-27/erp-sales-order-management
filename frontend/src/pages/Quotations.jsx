@@ -11,6 +11,7 @@ export const Quotations = () => {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const [enquiryId, setEnquiryId] = useState('');
   const [validUntil, setValidUntil] = useState('');
@@ -32,7 +33,7 @@ export const Quotations = () => {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [refreshKey]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -94,9 +95,12 @@ export const Quotations = () => {
     <>
       <div className="flex" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
         <h1>Quotations</h1>
-        {canWrite && <button onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Cancel' : '+ New Quotation'}
-        </button>}
+        <div className="flex">
+          <button className="secondary" onClick={() => setRefreshKey((k) => k + 1)}>Refresh</button>
+          {canWrite && <button onClick={() => setShowForm(!showForm)}>
+            {showForm ? 'Cancel' : '+ New Quotation'}
+          </button>}
+        </div>
       </div>
 
       {error && <div className="error">{error}</div>}
