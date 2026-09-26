@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { requireAuth, requireRole } from '../../middlewares/auth.js';
-import { createReservation } from './inventory.controller.js';
+import {
+	createReservation,
+	confirmReservation,
+	cancelReservation,
+} from './inventory.controller.js';
 
 const router = Router();
 router.post('/', requireAuth, requireRole('CUSTOMER', 'STAFF', 'MANAGER', 'ADMIN'), createReservation);

@@ -1,0 +1,52 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f5f7fa; color: #1a202c; font-size: 14px;
+}
+.app { min-height: 100vh; display: flex; flex-direction: column; }
+.container { max-width: 1200px; margin: 0 auto; padding: 24px; width: 100%; }
+header {
+  background: #1e293b; color: white; padding: 12px 24px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+header nav a { color: white; text-decoration: none; margin-right: 16px; }
+header nav a.active { text-decoration: underline; }
+header .user { font-size: 13px; }
+button {
+  background: #2563eb; color: white; border: none; padding: 8px 14px;
+  border-radius: 4px; cursor: pointer; font-size: 13px;
+}
+button:hover { background: #1d4ed8; }
+button.secondary { background: #64748b; }
+button.danger { background: #dc2626; }
+button:disabled { background: #94a3b8; cursor: not-allowed; }
+input, select, textarea {
+  padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px;
+  font-size: 13px; width: 100%; font-family: inherit;
+}
+table { width: 100%; border-collapse: collapse; background: white; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+th { background: #f1f5f9; font-weight: 600; }
+.card { background: white; padding: 20px; border-radius: 6px; margin-bottom: 16px; }
+.error { background: #fee2e2; color: #991b1b; padding: 10px; border-radius: 4px; margin-bottom: 12px; }
+.success { background: #d1fae5; color: #065f46; padding: 10px; border-radius: 4px; margin-bottom: 12px; }
+.flex { display: flex; gap: 8px; align-items: center; }
+.form-row { display: grid; grid-template-columns: 140px 1fr; gap: 8px; align-items: center; margin-bottom: 12px; }
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 12px;
+  font-size: 11px; font-weight: 600;
+}
+.badge.OPEN { background: #dbeafe; color: #1e40af; }
+.badge.QUOTED { background: #fef3c7; color: #92400e; }
+.badge.CLOSED { background: #d1fae5; color: #065f46; }
+.badge.DRAFT { background: #e2e8f0; color: #334155; }
+.badge.SENT { background: #dbeafe; color: #1e40af; }
+.badge.ACCEPTED { background: #d1fae5; color: #065f46; }
+.badge.REJECTED { background: #fee2e2; color: #991b1b; }
+.badge.CREATED { background: #e2e8f0; color: #334155; }
+.badge.CONFIRMED { background: #dbeafe; color: #1e40af; }
+.badge.DISPATCHED { background: #fef3c7; color: #92400e; }
+.badge.DELIVERED { background: #d1fae5; color: #065f46; }
+.badge.CANCELLED { background: #fee2e2; color: #991b1b; }
+.badge.PENDING { background: #e2e8f0; color: #334155; }
+.badge.IN_TRANSIT { background: #dbeafe; color: #1e40af; }

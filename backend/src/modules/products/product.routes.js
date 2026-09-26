@@ -12,6 +12,6 @@ router.get('/:id',      authorize('ADMIN','SALES','WAREHOUSE','VIEWER'), asyncHa
 // WRITE — ADMIN only
 router.post('/',        authorize('ADMIN'),                            asyncHandler(ctrl.create));
 router.patch('/:id',    authorize('ADMIN'),                            asyncHandler(ctrl.update));
-router.delete('/:id',   authorize('ADMIN'),                            asyncHandler(ctrl.delete));
+router.delete('/:id',   authorize('ADMIN'),                            asyncHandler(ctrl.deleteProduct));
 
 export default router;

@@ -1,5 +1,5 @@
 import { asyncHandler } from '../../middlewares/asyncHandler.js';
-import { orderService } from './order.service.js';
+import { orderService } from './orders.service.js';
 
 export const convertQuotationToOrder = asyncHandler(async (req, res) => {
   const order = await orderService.convertFromQuotation(req.params.id, req.user.id);

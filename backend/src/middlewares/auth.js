@@ -38,3 +38,6 @@ export const authorize = (...allowedRoles) => (req, _res, next) => {
   }
   next();
 };
+
+export const requireAuth = authenticate;
+export const requireRole = authorize;
