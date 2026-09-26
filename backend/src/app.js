@@ -5,6 +5,7 @@ import { authenticate } from './middlewares/auth.js';
 import authRoutes      from './modules/auth/auth.routes.js';
 import productRoutes   from './modules/products/product.routes.js';
 import inventoryRoutes from './modules/inventory/inventory.routes.js';
+import reservationRoutes from './modules/reservations/reservation.routes.js';
 import enquiryRoutes   from './modules/enquiries/enquiry.routes.js';
 import quotationRoutes from './modules/quotations/quotation.routes.js';
 import orderRoutes     from './modules/orders/order.routes.js';
@@ -22,6 +23,7 @@ app.use('/api', authenticate);                   // <-- single line guards every
 
 app.use('/api/products',   productRoutes);
 app.use('/api/inventory',  inventoryRoutes);
+app.use('/api/inventory',  reservationRoutes);
 app.use('/api/enquiries',  enquiryRoutes);
 app.use('/api/quotations', quotationRoutes);
 app.use('/api/orders',     orderRoutes);

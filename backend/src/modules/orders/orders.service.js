@@ -77,7 +77,15 @@ export const orderService = {
   },
 
   async getById(id) {
-    const order = await orderRepository.findById(id);
+    const order = await prisma.salesOrder.findUnique({
+      where: { id },
+      include: {
+        customer: true,
+        quotation: { include: { items: { include: { product: true } } } },
+        items: { include: { product: true } },
+        dispatches: { include: { items: { include: { product: true } } } },
+      },
+    });
     if (!order) throw httpError(404, 'Sales order not found', 'ORDER_NOT_FOUND');
     return order;
   },
