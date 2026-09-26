@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client.js';
+import { useAuth } from '../auth/AuthContext.jsx';
 
 export const Enquiries = () => {
+  const { user } = useAuth();
+  const canWrite = ['ADMIN', 'SALES'].includes(user?.role);
   const [enquiries, setEnquiries] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
@@ -39,7 +42,9 @@ export const Enquiries = () => {
     try {
       await api.createEnquiry({
         customerId,
-        requiredDate: requiredDate || undefined,
+        requiredDate: requiredDate
+          ? new Date(`${requiredDate}T00:00:00.000Z`).toISOString()
+          : undefined,
         notes: notes || undefined,
         items: items
           .filter((i) => i.productId && i.quantity > 0)
@@ -69,9 +74,9 @@ export const Enquiries = () => {
     <>
       <div className="flex" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
         <h1>Enquiries</h1>
-        <button onClick={() => setShowForm(!showForm)}>
+        {canWrite && <button onClick={() => setShowForm(!showForm)}>
           {showForm ? 'Cancel' : '+ New Enquiry'}
-        </button>
+        </button>}
       </div>
 
       {error && <div className="error">{error}</div>}

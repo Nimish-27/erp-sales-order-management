@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client.js';
+import { useAuth } from '../auth/AuthContext.jsx';
 
 export const Quotations = () => {
+  const { user } = useAuth();
+  const canWrite = ['ADMIN', 'SALES'].includes(user?.role);
   const [quotations, setQuotations] = useState([]);
   const [enquiries, setEnquiries] = useState([]);
   const [products, setProducts] = useState([]);
@@ -70,6 +73,17 @@ export const Quotations = () => {
     }
   };
 
+  const convertToOrder = async (id) => {
+    setError(''); setSuccess('');
+    try {
+      await api.convertQuotationToOrder(id);
+      setSuccess('Sales order created');
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const updateItem = (idx, field, value) => {
     const next = [...items];
     next[idx][field] = value;
@@ -80,9 +94,9 @@ export const Quotations = () => {
     <>
       <div className="flex" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
         <h1>Quotations</h1>
-        <button onClick={() => setShowForm(!showForm)}>
+        {canWrite && <button onClick={() => setShowForm(!showForm)}>
           {showForm ? 'Cancel' : '+ New Quotation'}
-        </button>
+        </button>}
       </div>
 
       {error && <div className="error">{error}</div>}
@@ -182,19 +196,17 @@ export const Quotations = () => {
                 <td><span className={`badge ${q.status}`}>{q.status}</span></td>
                 <td>
                   <div className="flex">
-                    {q.status === 'DRAFT' && (
+                    {canWrite && q.status === 'DRAFT' && (
                       <button onClick={() => updateStatus(q.id, 'SENT')}>Send</button>
                     )}
-                    {q.status === 'SENT' && (
+                    {canWrite && q.status === 'SENT' && (
                       <>
                         <button onClick={() => updateStatus(q.id, 'ACCEPTED')}>Accept</button>
                         <button className="danger" onClick={() => updateStatus(q.id, 'REJECTED')}>Reject</button>
                       </>
                     )}
-                    {q.status === 'ACCEPTED' && !q.order && (
-                      <span style={{ fontSize: 12, color: '#64748b' }}>
-                        Convert via Orders screen
-                      </span>
+                    {canWrite && q.status === 'ACCEPTED' && !q.order && (
+                      <button onClick={() => convertToOrder(q.id)}>Create Order</button>
                     )}
                   </div>
                 </td>

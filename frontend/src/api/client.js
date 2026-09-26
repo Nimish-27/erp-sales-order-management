@@ -32,6 +32,8 @@ const request = async (path, options = {}) => {
 export const api = {
   // Auth
   login: (email, password) => request('/auth/login', { method: 'POST', body: { email, password } }),
+  register: (email, password, role) =>
+    request('/auth/register', { method: 'POST', body: { email, password, role } }),
   me:    () => request('/auth/me'),
 
   // Enquiries
@@ -50,6 +52,8 @@ export const api = {
   // Orders
   listOrders:      () => request('/orders'),
   getOrder:        (id) => request(`/orders/${id}`),
+  convertQuotationToOrder: (id) =>
+    request(`/orders/quotations/${id}/convert`, { method: 'POST' }),
   confirmOrder:    (id) => request(`/inventory/orders/${id}/confirm`, { method: 'POST' }),
   dispatchOrder:   (id, data) =>
     request(`/dispatches/sales-orders/${id}/dispatch`, { method: 'POST', body: data }),
@@ -59,5 +63,8 @@ export const api = {
 
   // Master data (for dropdowns)
   listProducts:    () => request('/products'),
+  createProduct:  (data) => request('/products', { method: 'POST', body: data }),
+  updateProduct:  (id, data) => request(`/products/${id}`, { method: 'PATCH', body: data }),
+  deleteProduct:  (id) => request(`/products/${id}`, { method: 'DELETE' }),
   listCustomers:   () => request('/customers'),
 };

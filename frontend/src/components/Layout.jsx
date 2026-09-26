@@ -17,6 +17,9 @@ export const Layout = () => {
           <NavLink to="/enquiries" className={({ isActive }) => isActive ? 'active' : ''}>Enquiries</NavLink>
           <NavLink to="/quotations" className={({ isActive }) => isActive ? 'active' : ''}>Quotations</NavLink>
           <NavLink to="/orders" className={({ isActive }) => isActive ? 'active' : ''}>Orders</NavLink>
+          {user?.role === 'ADMIN' && (
+            <NavLink to="/products" className={({ isActive }) => isActive ? 'active' : ''}>Products</NavLink>
+          )}
         </nav>
         <div className="flex">
           <span className="user">{user?.email} ({user?.role})</span>

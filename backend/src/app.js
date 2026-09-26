@@ -10,6 +10,7 @@ import enquiryRoutes   from './modules/enquiries/enquiry.routes.js';
 import quotationRoutes from './modules/quotations/quotation.routes.js';
 import orderRoutes     from './modules/orders/order.routes.js';
 import dispatchRoutes  from './modules/dispatches/dispatch.routes.js';
+import customerRoutes  from './modules/customers/customer.routes.js';
 
 export const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -28,6 +29,7 @@ app.use('/api/enquiries',  enquiryRoutes);
 app.use('/api/quotations', quotationRoutes);
 app.use('/api/orders',     orderRoutes);
 app.use('/api/dispatches', dispatchRoutes);
+app.use('/api/customers',  customerRoutes);
 
 // -------- Final error catch-all --------
 app.use(errorHandler);

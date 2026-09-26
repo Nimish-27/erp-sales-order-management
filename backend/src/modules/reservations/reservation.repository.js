@@ -7,9 +7,11 @@ import { Prisma } from '@prisma/client';
  */
 export const lockInventoryForProduct = async (tx, productId) => {
   const rows = await tx.$queryRaw(
-    Prisma.sql`SELECT "productId", "physicalQty", "reservedQty"
-               FROM "Inventory"
-               WHERE "productId" = ${productId}
+    Prisma.sql`SELECT "product_id" AS "productId",
+                      "physical_qty" AS "physicalQty",
+                      "reserved_qty" AS "reservedQty"
+               FROM "inventory"
+               WHERE "product_id" = ${productId}
                FOR UPDATE`
   );
   return rows[0] || null;

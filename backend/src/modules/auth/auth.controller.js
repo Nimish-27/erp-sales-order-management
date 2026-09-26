@@ -10,3 +10,8 @@ export const me = asyncHandler(async (req, res) => {
   const user = await authService.me(req.user.id);
   res.status(200).json({ success: true, data: user });
 });
+
+export const register = asyncHandler(async (req, res) => {
+  const result = await authService.register(req.body);
+  res.status(201).json({ success: true, data: result });
+});

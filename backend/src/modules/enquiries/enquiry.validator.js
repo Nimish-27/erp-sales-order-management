@@ -29,7 +29,8 @@ export const enquiryIdParam = z.object({
 });
 
 export const validate = (schema) => (req, _res, next) => {
-  const result = schema.safeParse(req.params.id ? { ...req.body, ...req.params } : req.body);
+  const validator = typeof schema.safeParse === 'function' ? schema : z.object(schema);
+  const result = validator.safeParse(req.params.id ? { ...req.body, ...req.params } : req.body);
   if (!result.success) {
     return next({
       status: 400,

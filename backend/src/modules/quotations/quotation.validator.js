@@ -39,7 +39,8 @@ export const statusTransitionSchema = z.object({
 
 export const validate = (schema) => (req, _res, next) => {
   const data = req.params.id ? { ...req.body, ...req.params } : req.body;
-  const result = schema.safeParse(data);
+  const validator = typeof schema.safeParse === 'function' ? schema : z.object(schema);
+  const result = validator.safeParse(data);
   if (!result.success) {
     return next({
       status: 400,

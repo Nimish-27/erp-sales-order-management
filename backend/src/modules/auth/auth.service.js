@@ -38,3 +38,22 @@ export const me = async (userId) => {
   if (!user || !user.isActive) throw httpError(404, 'User not found', 'USER_NOT_FOUND');
   return user;
 };
+
+export const register = async ({ email, password, role = 'SALES' }) => {
+  const passwordHash = await bcrypt.hash(password, env.BCRYPT_ROUNDS);
+
+  try {
+    const user = await prisma.user.create({
+      data: { email, passwordHash, role },
+      select: { id: true, email: true, role: true },
+    });
+
+    const token = signToken({ sub: user.id, email: user.email, role: user.role });
+    return { token, user };
+  } catch (error) {
+    if (error.code === 'P2002') {
+      throw httpError(409, 'An account with this email already exists', 'AUTH_EMAIL_EXISTS');
+    }
+    throw error;
+  }
+};

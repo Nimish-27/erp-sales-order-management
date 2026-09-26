@@ -29,13 +29,20 @@ export const AuthProvider = ({ children }) => {
     return data.user;
   };
 
+  const register = async (email, password, role) => {
+    const { data } = await api.register(email, password, role);
+    setToken(data.token);
+    setUser(data.user);
+    return data.user;
+  };
+
   const logout = () => {
     clearToken();
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

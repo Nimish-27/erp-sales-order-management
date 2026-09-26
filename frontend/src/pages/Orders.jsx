@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client.js';
+import { useAuth } from '../auth/AuthContext.jsx';
 
 export const Orders = () => {
+  const { user } = useAuth();
+  const canConfirm = user?.role === 'ADMIN';
+  const canDispatch = ['ADMIN', 'SALES', 'WAREHOUSE'].includes(user?.role);
   const [orders, setOrders] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [error, setError] = useState('');
@@ -90,7 +94,7 @@ export const Orders = () => {
       {error && <div className="error">{error}</div>}
       {success && <div className="success">{success}</div>}
 
-      {dispatchOrderId && (
+      {dispatchOrderId && canDispatch && (
         <div className="card">
           <h3 style={{ marginBottom: 12 }}>Dispatch Order</h3>
           <form onSubmit={handleDispatch}>
@@ -176,12 +180,15 @@ export const Orders = () => {
                   <td><span className={`badge ${o.status}`}>{o.status}</span></td>
                   <td>
                     <div className="flex">
-                      {o.status === 'CREATED' && (
+                      {o.status === 'CREATED' && canConfirm && (
                         <button onClick={() => handleConfirm(o.id)} disabled={hasStockIssue}>
                           {hasStockIssue ? 'No Stock' : 'Confirm'}
                         </button>
                       )}
-                      {o.status === 'CONFIRMED' && (
+                      {o.status === 'CREATED' && !canConfirm && (
+                        <span style={{ fontSize: 12, color: '#64748b' }}>Awaiting admin confirmation</span>
+                      )}
+                      {o.status === 'CONFIRMED' && canDispatch && (
                         <button onClick={() => setDispatchOrderId(o.id)}>Dispatch</button>
                       )}
                       {o.status === 'DISPATCHED' && o.dispatches?.[0] && (
