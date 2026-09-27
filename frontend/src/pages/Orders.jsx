@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 
 export const Orders = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const canConfirm = user?.role === 'ADMIN';
   const canDispatch = user?.role === 'ADMIN';
@@ -13,11 +15,6 @@ export const Orders = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
-
-  // Dispatch form state
-  const [dispatchOrderId, setDispatchOrderId] = useState(null);
-  const [vehicleNumber, setVehicleNumber] = useState('');
-  const [driverName, setDriverName] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -81,30 +78,6 @@ export const Orders = () => {
     }
   };
 
-  const handleDispatch = async (e) => {
-    e.preventDefault();
-    setError(''); setSuccess('');
-    try {
-      await api.dispatchOrder(dispatchOrderId, {
-        vehicleNumber: vehicleNumber || undefined,
-        driverName: driverName || undefined,
-      });
-      setSuccess('Order dispatched — stock decremented');
-      setDispatchOrderId(null);
-      setVehicleNumber(''); setDriverName('');
-      setRefreshKey((k) => k + 1);
-    } catch (err) {
-      if (err.details?.failures) {
-        const failList = err.details.failures
-          .map((f) => `${f.productCode}: requested ${f.requested}, reserved ${f.reserved}`)
-          .join('; ');
-        setError(`Dispatch error: ${failList}`);
-      } else {
-        setError(err.message);
-      }
-    }
-  };
-
   const totalAvailable = (productIds) =>
     productIds.reduce((min, pid) => {
       const inv = inventoryMap.get(pid);
@@ -121,36 +94,6 @@ export const Orders = () => {
 
       {error && <div className="error">{error}</div>}
       {success && <div className="success">{success}</div>}
-
-      {dispatchOrderId && canDispatch && (
-        <div className="card">
-          <h3 style={{ marginBottom: 12 }}>Dispatch Order</h3>
-          <form onSubmit={handleDispatch}>
-            <div className="form-row">
-              <label>Vehicle Number</label>
-              <input
-                value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)}
-                placeholder="MH-12-AB-1234" minLength={3} maxLength={20}
-                pattern="[A-Za-z0-9][A-Za-z0-9 .-]*" title="Use letters, numbers, spaces, dots, or hyphens"
-                autoComplete="off" required
-              />
-            </div>
-            <div className="form-row">
-              <label>Driver Name</label>
-              <input
-                value={driverName} onChange={(e) => setDriverName(e.target.value)}
-                minLength={2} maxLength={100} autoComplete="name" required
-              />
-            </div>
-            <div className="flex">
-              <button type="submit">Confirm Dispatch</button>
-              <button type="button" className="secondary" onClick={() => setDispatchOrderId(null)}>
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
 
       <div className="card" style={{ padding: 0 }}>
         <table>
@@ -220,7 +163,7 @@ export const Orders = () => {
                         <span style={{ fontSize: 12, color: '#64748b' }}>Awaiting admin confirmation</span>
                       )}
                       {o.status === 'CONFIRMED' && canDispatch && (
-                        <button onClick={() => setDispatchOrderId(o.id)}>Dispatch</button>
+                        <button onClick={() => navigate(`/dispatches?orderId=${o.id}`)}>Create dispatch</button>
                       )}
                       {['CREATED', 'CONFIRMED'].includes(o.status) && canConfirm && (
                         <button className="danger" onClick={() => handleCancel(o.id)}>Cancel</button>

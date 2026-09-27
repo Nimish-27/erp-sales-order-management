@@ -55,7 +55,7 @@ export const api = {
     request(`/quotations/${id}/status`, { method: 'PATCH', body: { status } }),
 
   // Orders
-  listOrders:      () => request('/orders'),
+  listOrders:      () => requestAllPages('/orders'),
   getOrder:        (id) => request(`/orders/${id}`),
   convertQuotationToOrder: (id) =>
     request(`/orders/quotations/${id}/convert`, { method: 'POST' }),

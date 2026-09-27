@@ -3,6 +3,7 @@ import { Login } from './pages/Login.jsx';
 import { Enquiries } from './pages/Enquiries.jsx';
 import { Quotations } from './pages/Quotations.jsx';
 import { Orders } from './pages/Orders.jsx';
+import { Dispatches } from './pages/Dispatches.jsx';
 import { Products } from './pages/Products.jsx';
 import { Customers } from './pages/Customers.jsx';
 import { Layout } from './components/Layout.jsx';
@@ -15,6 +16,7 @@ const App = () => (
       <Route path="/enquiries" element={<Enquiries />} />
       <Route path="/quotations" element={<Quotations />} />
       <Route path="/orders" element={<Orders />} />
+      <Route path="/dispatches" element={<Dispatches />} />
       <Route path="/products" element={<Products />} />
       <Route path="/customers" element={<Customers />} />
     </Route>
