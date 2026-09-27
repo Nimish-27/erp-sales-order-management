@@ -1,5 +1,12 @@
 import { enquiryRepository } from './enquiry.repository.js';
 import { httpError } from '../../shared/errors.js';
+import { prisma } from '../../config/db.js';
+
+const TRANSITIONS = {
+  OPEN:   ['CANCELLED'],
+  QUOTED: ['CLOSED', 'CANCELLED'],
+  // CLOSED, CANCELLED are terminal
+};
 
 export const enquiryService = {
   async create(data, userId) {
@@ -20,8 +27,8 @@ export const enquiryService = {
     return enquiryRepository.create(data, userId);
   },
 
-  async list(filters) {
-    return enquiryRepository.findAll(filters);
+  async list(filters, { skip = 0, limit = 20 } = {}) {
+    return enquiryRepository.findAll(filters, { skip, limit });
   },
 
   async getById(id) {
@@ -46,7 +53,24 @@ export const enquiryService = {
       }
     }
 
-    return enquiryRepository.update(id, data);
+    const { status: _status, ...safeData } = data;
+    return enquiryRepository.update(id, safeData);
+  },
+
+  async transitionStatus(id, newStatus) {
+    const enquiry = await enquiryRepository.findById(id);
+    if (!enquiry) throw httpError(404, 'Enquiry not found', 'ENQUIRY_NOT_FOUND');
+
+    const allowed = TRANSITIONS[enquiry.status];
+    if (!allowed || !allowed.includes(newStatus)) {
+      throw httpError(
+        409,
+        `Invalid status transition: ${enquiry.status} → ${newStatus}. Allowed: ${allowed?.join(', ') || 'none'}`,
+        'INVALID_TRANSITION'
+      );
+    }
+
+    return enquiryRepository.updateStatus(id, newStatus);
   },
 
   async delete(id) {
@@ -62,5 +86,3 @@ export const enquiryService = {
     return enquiryRepository.delete(id);
   },
 };
-
-import { prisma } from '../../config/db.js'; // for service-level checks

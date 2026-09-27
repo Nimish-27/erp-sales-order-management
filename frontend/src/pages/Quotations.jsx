@@ -18,22 +18,22 @@ export const Quotations = () => {
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState([{ productId: '', quantity: 1, unitPrice: '', discountPct: 0, gstPct: 18 }]);
 
-  const load = async () => {
-    try {
-      const [{ data: qData }, { data: eData }, { data: pData }] = await Promise.all([
-        api.listQuotations(),
-        api.listEnquiries(),
-        api.listProducts().catch(() => ({ data: [] })),
-      ]);
-      setQuotations(qData);
-      setEnquiries(eData.filter((e) => ['OPEN', 'QUOTED'].includes(e.status)));
-      setProducts(pData);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  useEffect(() => { load(); }, [refreshKey]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [{ data: qData }, { data: eData }, { data: pData }] = await Promise.all([
+          api.listQuotations(),
+          api.listEnquiries(),
+          api.listProducts().catch(() => ({ data: [] })),
+        ]);
+        setQuotations(qData);
+        setEnquiries(eData.filter((e) => ['OPEN', 'QUOTED'].includes(e.status)));
+        setProducts(pData);
+      } catch (err) {
+        setError(err.message);
+      }
+    })();
+  }, [refreshKey]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -57,7 +57,7 @@ export const Quotations = () => {
       setShowForm(false);
       setEnquiryId(''); setValidUntil(''); setNotes('');
       setItems([{ productId: '', quantity: 1, unitPrice: '', discountPct: 0, gstPct: 18 }]);
-      load();
+      setRefreshKey((k) => k + 1);
     } catch (err) {
       setError(err.message);
     }
@@ -68,7 +68,7 @@ export const Quotations = () => {
     try {
       await api.updateQuotationStatus(id, status);
       setSuccess(`Quotation ${status.toLowerCase()}`);
-      load();
+      setRefreshKey((k) => k + 1);
     } catch (err) {
       setError(err.message);
     }
@@ -79,7 +79,7 @@ export const Quotations = () => {
     try {
       await api.convertQuotationToOrder(id);
       setSuccess('Sales order created');
-      load();
+      setRefreshKey((k) => k + 1);
     } catch (err) {
       setError(err.message);
     }
@@ -180,6 +180,7 @@ export const Quotations = () => {
               <th>#</th>
               <th>Customer</th>
               <th>From Enquiry</th>
+              <th>Items</th>
               <th>Grand Total</th>
               <th>Valid Until</th>
               <th>Status</th>
@@ -188,13 +189,21 @@ export const Quotations = () => {
           </thead>
           <tbody>
             {quotations.length === 0 && (
-              <tr><td colSpan="7" style={{ textAlign: 'center', padding: 20 }}>No quotations yet</td></tr>
+              <tr><td colSpan="8" style={{ textAlign: 'center', padding: 20 }}>No quotations yet</td></tr>
             )}
             {quotations.map((q) => (
               <tr key={q.id}>
                 <td>{q.quotationNumber}</td>
                 <td>{q.customer?.companyName || '—'}</td>
                 <td>{q.enquiry?.enquiryNumber || '—'}</td>
+                <td>
+                  {q.items?.length ? q.items.map((item) => (
+                    <div key={item.id} style={{ fontSize: 12, marginBottom: 3 }}>
+                      {item.product?.productCode || item.product?.name || 'Item'} × {item.quantity}
+                      {' — ₹ '}{parseFloat(item.lineAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </div>
+                  )) : '—'}
+                </td>
                 <td>₹ {parseFloat(q.grandTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 <td>{q.validUntil ? new Date(q.validUntil).toLocaleDateString() : '—'}</td>
                 <td><span className={`badge ${q.status}`}>{q.status}</span></td>
@@ -205,10 +214,12 @@ export const Quotations = () => {
                     )}
                     {canWrite && q.status === 'SENT' && (
                       <>
-                        <button onClick={() => updateStatus(q.id, 'ACCEPTED')}>Accept</button>
-                        <button className="danger" onClick={() => updateStatus(q.id, 'REJECTED')}>Reject</button>
+                        <button onClick={() => updateStatus(q.id, 'ACCEPTED')}>Accept quotation</button>
+                        <button className="danger" onClick={() => updateStatus(q.id, 'REJECTED')}>Reject quotation</button>
                       </>
                     )}
+                    {q.status === 'DRAFT' && <span style={{ fontSize: 12, color: '#64748b' }}>Awaiting quotation to be sent</span>}
+                    {q.status === 'SENT' && !canWrite && <span style={{ fontSize: 12, color: '#64748b' }}>Awaiting customer decision</span>}
                     {canWrite && q.status === 'ACCEPTED' && !q.order && (
                       <button onClick={() => convertToOrder(q.id)}>Create Order</button>
                     )}

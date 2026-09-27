@@ -22,10 +22,10 @@ export const Layout = () => {
           )}
           <NavLink to="/orders" className={({ isActive }) => isActive ? 'active' : ''}>Orders</NavLink>
           {user?.role === 'ADMIN' && (
-            <>
-              <NavLink to="/products" className={({ isActive }) => isActive ? 'active' : ''}>Products</NavLink>
-              <NavLink to="/customers" className={({ isActive }) => isActive ? 'active' : ''}>Customers</NavLink>
-            </>
+            <NavLink to="/products" className={({ isActive }) => isActive ? 'active' : ''}>Products</NavLink>
+          )}
+          {['ADMIN', 'SALES'].includes(user?.role) && (
+            <NavLink to="/customers" className={({ isActive }) => isActive ? 'active' : ''}>Customers</NavLink>
           )}
         </nav>
         <div className="flex">

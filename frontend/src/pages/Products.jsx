@@ -20,16 +20,16 @@ export const Products = () => {
   const [success, setSuccess] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const load = async () => {
-    try {
-      const { data } = await api.listProducts();
-      setProducts(data);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  useEffect(() => { load(); }, [refreshKey]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await api.listProducts();
+        setProducts(data);
+      } catch (err) {
+        setError(err.message);
+      }
+    })();
+  }, [refreshKey]);
 
   const updateField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
@@ -48,7 +48,7 @@ export const Products = () => {
       setForm(emptyForm);
       setShowForm(false);
       setSuccess('Product created');
-      load();
+      setRefreshKey((k) => k + 1);
     } catch (err) {
       setError(err.message);
     }
@@ -60,7 +60,7 @@ export const Products = () => {
     try {
       await api.deleteProduct(id);
       setSuccess('Product deactivated');
-      load();
+      setRefreshKey((k) => k + 1);
     } catch (err) {
       setError(err.message);
     }

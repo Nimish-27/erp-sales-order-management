@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { authorize } from '../../middlewares/auth.js';
 import { asyncHandler } from '../../middlewares/asyncHandler.js';
 import { validate } from './quotation.validator.js';
-import { orderController } from '../orders/order.controller.js';
 import {
   createQuotationSchema,
   updateQuotationSchema,
@@ -10,22 +9,15 @@ import {
   statusTransitionSchema,
 } from './quotation.validator.js';
 import * as ctrl from './quotation.controller.js';
+import { validateQuery, quotationQuerySchema } from '../../shared/queryValidators.js';
 
 const router = Router();
 
 const readRoles = ['ADMIN', 'SALES', 'WAREHOUSE', 'VIEWER'];
 const writeRoles = ['ADMIN', 'SALES'];
 
-// Conversion: POST /api/quotations/:id/convert
-router.post(
-  '/:id/convert',
-  authorize(...writeRoles),
-  validate(quotationIdParam),
-  asyncHandler(orderController.convertQuotationToOrder)
-);
-
 // List & Get
-router.get('/', authorize(...readRoles), asyncHandler(ctrl.listQuotations));
+router.get('/', authorize(...readRoles), validateQuery(quotationQuerySchema), asyncHandler(ctrl.listQuotations));
 router.get('/:id', authorize(...readRoles), validate(quotationIdParam), asyncHandler(ctrl.getQuotation));
 
 // Create (from enquiry)

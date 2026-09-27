@@ -1,17 +1,13 @@
 import { prisma } from '../../config/db.js';
 import { orderRepository } from './order.repository.js';
 import { httpError } from '../../shared/errors.js';
-import { Prisma } from '@prisma/client';
 
-// Allowed transitions — CONFIRMED is no longer reachable via status patch;
-// it is set exclusively by POST /orders/:id/confirm (ADMIN + inventory reservation)
-const TRANSITIONS = {
-  CREATED:    ['CANCELLED'],
-  CONFIRMED:  ['DISPATCHED', 'CANCELLED'],
-  DISPATCHED: ['DELIVERED'],
-  DELIVERED:  [],
-  CANCELLED:  [],
-};
+// Status transitions reachable via PATCH /orders/:id/status.
+// CONFIRMED is intentionally absent — it is set exclusively by POST /orders/:id/confirm.
+// CANCELLED is intentionally absent — it is set exclusively by POST /orders/:id/cancel
+//   (which runs cancelSalesOrder and releases reserved inventory).
+// DISPATCHED/DELIVERED are set by the dispatch routes, not here.
+const TRANSITIONS = {};  // no generic status patch transitions remain
 
 export const orderService = {
   /**
@@ -73,8 +69,8 @@ export const orderService = {
     }
   },
 
-  async list(filters) {
-    return orderRepository.findAll(filters);
+  async list(filters, { skip = 0, limit = 20 } = {}) {
+    return orderRepository.findAll(filters, { skip, limit });
   },
 
   async getById(id) {
@@ -84,7 +80,7 @@ export const orderService = {
         customer: true,
         quotation: { include: { items: { include: { product: true } } } },
         items: { include: { product: true } },
-        dispatches: { include: { items: { include: { product: true } } } },
+        dispatch: { include: { items: { include: { product: true } } } },
         reservations: true,
       },
     });
@@ -92,25 +88,4 @@ export const orderService = {
     return order;
   },
 
-  async transitionStatus(id, newStatus, userRole) {
-    const order = await orderRepository.findById(id);
-    if (!order) throw httpError(404, 'Sales order not found', 'ORDER_NOT_FOUND');
-
-    // Check transition
-    const allowed = TRANSITIONS[order.status];
-    if (!allowed || !allowed.includes(newStatus)) {
-      throw httpError(
-        409,
-        `Invalid status transition: ${order.status} → ${newStatus}. Allowed: ${allowed?.join(', ') || 'none'}`,
-        'INVALID_TRANSITION'
-      );
-    }
-
-    // Role gate for sensitive transitions
-    if (newStatus === 'CANCELLED' && userRole !== 'ADMIN') {
-      throw httpError(403, 'Only ADMIN can cancel orders', 'INSUFFICIENT_ROLE');
-    }
-
-    return orderRepository.updateStatus(id, newStatus);
-  },
 };

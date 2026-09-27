@@ -27,34 +27,40 @@ export const enquiryRepository = {
   async generateEnquiryNumber(tx) {
     const year = new Date().getFullYear();
     const prefix = `ENQ-${year}-`;
-    const last = await tx.enquiry.findFirst({
-      where: { enquiryNumber: { startsWith: prefix } },
-      orderBy: { enquiryNumber: 'desc' },
-      select: { enquiryNumber: true },
-    });
-    const seq = last ? parseInt(last.enquiryNumber.split('-').pop(), 10) + 1 : 1;
+    const rows = await tx.$queryRaw`
+      SELECT "enquiry_number" FROM "enquiries"
+      WHERE "enquiry_number" LIKE ${prefix + '%'}
+      ORDER BY "enquiry_number" DESC
+      LIMIT 1
+      FOR UPDATE`;
+    const seq = rows.length ? parseInt(rows[0].enquiry_number.split('-').pop(), 10) + 1 : 1;
     return `${prefix}${String(seq).padStart(4, '0')}`;
   },
 
-  async findAll(filters = {}) {
+  async findAll(filters = {}, { skip = 0, limit = 20 } = {}) {
     const where = {};
     if (filters.customerId) where.customerId = filters.customerId;
     if (filters.status) where.status = filters.status;
     if (filters.fromDate || filters.toDate) {
       where.enquiryDate = {};
-      if (filters.fromDate) where.enquiryDate.gte = new Date(filters.fromDate);
-      if (filters.toDate) where.enquiryDate.lte = new Date(filters.toDate);
+      if (filters.fromDate) where.enquiryDate.gte = filters.fromDate;
+      if (filters.toDate) where.enquiryDate.lte = filters.toDate;
     }
-
-    return prisma.enquiry.findMany({
-      where,
-      include: {
-        customer: { select: { id: true, companyName: true } },
-        items: { include: { product: { select: { id: true, productCode: true, name: true, unit: true } } } },
-        quotations: { select: { id: true, quotationNumber: true, status: true } },
-      },
-      orderBy: { enquiryDate: 'desc' },
-    });
+    const [data, total] = await Promise.all([
+      prisma.enquiry.findMany({
+        where,
+        include: {
+          customer: { select: { id: true, companyName: true } },
+          items: { include: { product: { select: { id: true, productCode: true, name: true, unit: true } } } },
+          quotations: { select: { id: true, quotationNumber: true, status: true } },
+        },
+        orderBy: { enquiryDate: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.enquiry.count({ where }),
+    ]);
+    return { data, total };
   },
 
   async findById(id) {
@@ -87,6 +93,14 @@ export const enquiryRepository = {
         },
         include: { items: { include: { product: true } }, customer: true },
       });
+    });
+  },
+
+  async updateStatus(id, newStatus) {
+    return prisma.enquiry.update({
+      where: { id },
+      data: { status: newStatus },
+      include: { items: { include: { product: true } }, customer: true },
     });
   },
 

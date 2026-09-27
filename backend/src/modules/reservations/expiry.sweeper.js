@@ -1,29 +1,52 @@
 import { prisma } from '../../config/db.js';
 import { Prisma } from '@prisma/client';
 
+/**
+ * Sweep orphaned reservations: CONFIRMED reservations whose sales order has
+ * been CANCELLED but whose reservedQty was never released (should not happen
+ * via normal flow, but guards against partial failures or manual DB edits).
+ *
+ * NOTE: The system does NOT use PENDING reservations with expiresAt.
+ * All reservations are created as CONFIRMED by confirmSalesOrder and released
+ * atomically by cancelSalesOrder. This sweeper is a safety net only.
+ */
 export const sweepExpiredReservations = async () => {
-  const now = new Date();
-  const expired = await prisma.reservation.findMany({
-    where: { status: 'PENDING', expiresAt: { lt: now } },
-    select: { id: true, productId: true, quantity: true },
+  // Find CONFIRMED reservations whose order is CANCELLED
+  const orphaned = await prisma.reservation.findMany({
+    where: {
+      status: 'CONFIRMED',
+      order: { status: 'CANCELLED' },
+    },
+    select: { id: true, productId: true, quantity: true, orderId: true },
   });
 
-  for (const r of expired) {
+  let swept = 0;
+  for (const r of orphaned) {
     await prisma.$transaction(async (tx) => {
-      // Lock both rows in deterministic order to avoid deadlocks
-      await tx.$queryRaw(Prisma.sql`SELECT id FROM "Reservation" WHERE id = ${r.id} FOR UPDATE`);
-      await tx.$queryRaw(Prisma.sql`SELECT id FROM "Inventory" WHERE "productId" = ${r.productId} FOR UPDATE`);
+      // Re-check inside tx to avoid double-release races
+      const reservation = await tx.reservation.findUnique({
+        where: { id: r.id },
+        select: { status: true },
+      });
+      // Another process may have already released it
+      if (!reservation || reservation.status !== 'CONFIRMED') return;
+
+      await tx.$queryRaw(Prisma.sql`SELECT "product_id" FROM "inventory" WHERE "product_id" = ${r.productId} FOR UPDATE`);
 
       await tx.inventory.update({
         where: { productId: r.productId },
-        data: { quantityReserved: { decrement: r.quantity } },
+        data: { reservedQty: { decrement: r.quantity } },
       });
       await tx.reservation.update({
         where: { id: r.id },
-        data: { status: 'EXPIRED' },
+        data: { status: 'CANCELLED' },
       });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    swept++;
   }
 
-  return { swept: expired.length };
+  if (swept > 0) {
+    console.warn(`[sweeper] Released ${swept} orphaned reservation(s) for cancelled orders`);
+  }
+  return { swept };
 };

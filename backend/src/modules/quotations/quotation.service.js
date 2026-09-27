@@ -4,7 +4,18 @@ import { computeQuotation, computeLine } from './quotation.calculator.js';
 import { httpError } from '../../shared/errors.js';
 import { Decimal } from 'decimal.js';
 
-// Allowed transitions: DRAFT→SENT, SENT→ACCEPTED|REJECTED
+// Merge duplicate productIds by summing quantities (same price/discount/gst must match — reject if they differ)
+const deduplicateItems = (items) => {
+  const seen = new Map();
+  for (const item of items) {
+    if (seen.has(item.productId)) {
+      throw httpError(400, `Duplicate product in items: ${item.productId}. Combine into a single line.`, 'DUPLICATE_PRODUCT');
+    }
+    seen.set(item.productId, item);
+  }
+  return items;
+};
+
 const TRANSITIONS = {
   DRAFT: ['SENT'],
   SENT: ['ACCEPTED', 'REJECTED'],
@@ -46,7 +57,7 @@ export const quotationService = {
       }
       // Fill defaults from product
       const productMap = new Map(products.map((p) => [p.id, p]));
-      items = items.map((item) => {
+      items = deduplicateItems(items).map((item) => {
         const p = productMap.get(item.productId);
         return {
           ...item,
@@ -69,8 +80,8 @@ export const quotationService = {
     return quotation;
   },
 
-  async list(filters) {
-    return quotationRepository.findAll(filters);
+  async list(filters, { skip = 0, limit = 20 } = {}) {
+    return quotationRepository.findAll(filters, { skip, limit });
   },
 
   async getById(id) {
@@ -99,7 +110,7 @@ export const quotationService = {
         throw httpError(400, 'One or more products not found or inactive', 'PRODUCT_INVALID');
       }
       const productMap = new Map(products.map((p) => [p.id, p]));
-      const itemsWithDefaults = data.items.map((item) => {
+      const itemsWithDefaults = deduplicateItems(data.items).map((item) => {
         const p = productMap.get(item.productId);
         return {
           ...item,
@@ -111,7 +122,8 @@ export const quotationService = {
       computed = computeQuotation(itemsWithDefaults);
     }
 
-    return quotationRepository.update(id, data, computed);
+    const { items: _items, status: _status, ...safeData } = data;
+    return quotationRepository.update(id, safeData, computed);
   },
 
   async transitionStatus(id, newStatus, userId) {

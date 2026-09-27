@@ -3,8 +3,8 @@ import { app } from '../src/app.js';
 import { prisma } from '../src/config/db.js';
 
 describe('Auth & RBAC', () => {
-  let adminToken;
-  let salesToken;
+  let adminCookie;
+  let salesCookie;
 
   beforeAll(async () => {
     await prisma.user.deleteMany();
@@ -20,14 +20,16 @@ describe('Auth & RBAC', () => {
 
   afterAll(async () => await prisma.$disconnect());
 
-  test('POST /auth/login with valid creds → 200 + token', async () => {
+  test('POST /auth/login with valid creds → 200 + HTTP-only cookie', async () => {
     const res = await request(app)
       .post('/api/auth/login')
       .send({ email: 'admin@inventory.local', password: 'Password@123' });
     expect(res.status).toBe(200);
-    expect(res.body.data.token).toBeDefined();
+    const setCookie = res.headers['set-cookie']?.[0];
+    expect(setCookie).toContain('HttpOnly');
+    expect(res.body.data.token).toBeUndefined();
     expect(res.body.data.user.role).toBe('ADMIN');
-    adminToken = res.body.data.token;
+    adminCookie = setCookie.split(';')[0];
   });
 
   test('POST /auth/login with bad password → 401 (no enumeration)', async () => {
@@ -46,14 +48,14 @@ describe('Auth & RBAC', () => {
   test('Protected route with garbage token → 401', async () => {
     const res = await request(app)
       .get('/api/products')
-      .set('Authorization', 'Bearer not-a-real-jwt');
+      .set('Cookie', 'token=not-a-real-jwt');
     expect(res.status).toBe(401);
   });
 
   test('GET /api/auth/me with valid token → user info', async () => {
     const res = await request(app)
       .get('/api/auth/me')
-      .set('Authorization', `Bearer ${adminToken}`);
+      .set('Cookie', adminCookie);
     expect(res.status).toBe(200);
     expect(res.body.data.email).toBe('admin@inventory.local');
   });
@@ -62,11 +64,11 @@ describe('Auth & RBAC', () => {
     const login = await request(app)
       .post('/api/auth/login')
       .send({ email: 'sales@inventory.local', password: 'Password@123' });
-    salesToken = login.body.data.token;
+    salesCookie = login.headers['set-cookie'][0].split(';')[0];
 
     const res = await request(app)
       .post('/api/products')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ productCode: 'X-1', name: 'x', category: 'y', unit: 'pcs', basePrice: '1.00' });
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('RBAC_FORBIDDEN');
@@ -75,7 +77,7 @@ describe('Auth & RBAC', () => {
   test('ADMIN can POST /api/products', async () => {
     const res = await request(app)
       .post('/api/products')
-      .set('Authorization', `Bearer ${adminToken}`)
+      .set('Cookie', adminCookie)
       .send({ productCode: 'TEST-001', name: 'Test', category: 'Misc', unit: 'pcs', basePrice: '10.00' });
     expect(res.status).toBe(201);
   });
@@ -83,7 +85,7 @@ describe('Auth & RBAC', () => {
   test('SALES CAN list /api/products (read-all)', async () => {
     const res = await request(app)
       .get('/api/products')
-      .set('Authorization', `Bearer ${salesToken}`);
+      .set('Cookie', salesCookie);
     expect(res.status).toBe(200);
   });
 

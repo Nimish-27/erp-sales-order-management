@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { api, setToken, clearToken, getToken } from '../api/client.js';
+import { api } from '../api/client.js';
 
 const AuthContext = createContext(null);
 
@@ -9,35 +9,31 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const init = async () => {
-      if (getToken()) {
-        try {
-          const { data } = await api.me();
-          setUser(data);
-        } catch {
-          clearToken();
-        }
+      try {
+        const { data } = await api.me();
+        setUser(data);
+      } catch {
+        setUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     init();
   }, []);
 
   const login = async (email, password) => {
     const { data } = await api.login(email, password);
-    setToken(data.token);
     setUser(data.user);
     return data.user;
   };
 
   const register = async (email, password, role) => {
     const { data } = await api.register(email, password, role);
-    setToken(data.token);
-    setUser(data.user);
     return data.user;
   };
 
-  const logout = () => {
-    clearToken();
+  const logout = async () => {
+    await api.logout().catch(() => {});
     setUser(null);
   };
 

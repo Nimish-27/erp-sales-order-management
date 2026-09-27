@@ -68,6 +68,7 @@ model User {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   reservations Reservation[]
+  auditLogs    AuditLog[]
 
   @@map("users")
 }
@@ -129,7 +130,7 @@ model Inventory {
   product       Product @relation(fields: [productId], references: [id])
   physicalQty   Int     @map("physical_qty")
   reservedQty   Int     @default(0) @map("reserved_qty")
-  damagedQty    Int?    @map("damaged_qty")   // nullable-for-later per spec
+  damagedQty    Int     @default(0) @map("damaged_qty")
   reorderLevel  Int?    @map("reorder_level")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -310,4 +311,27 @@ model DispatchItem {
   @@index([dispatchId])
   @@index([productId])
   @@map("dispatch_items")
+}
+
+// =====================================================
+// AUDIT LOG
+// =====================================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  oldValue   Json?    @map("old_value")
+  newValue   Json?    @map("new_value")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
 }

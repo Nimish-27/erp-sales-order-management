@@ -19,7 +19,6 @@ export const createQuotationSchema = z.object({
 export const updateQuotationSchema = z.object({
   validUntil: z.string().datetime().optional().nullable(),
   notes: z.string().max(2000).optional(),
-  status: z.enum(['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED']).optional(),
   items: z.array(
     z.object({
       productId: z.string().uuid(),

@@ -6,6 +6,9 @@ import {
 } from './reservation.repository.js';
 import { httpError } from '../../shared/errors.js';
 
+const availableQuantity = (inventory) =>
+  inventory.physicalQty - inventory.reservedQty - (inventory.damagedQty ?? 0);
+
 /**
  * Confirm a Sales Order — the headline operation.
  *
@@ -24,7 +27,6 @@ export const confirmSalesOrder = async (orderId, userId) => {
       where: { id: orderId },
       include: {
         items: true,
-        dispatches: { select: { id: true } },
       },
     });
 
@@ -72,7 +74,7 @@ export const confirmSalesOrder = async (orderId, userId) => {
     const failures = [];
     for (const [productId, needQty] of required) {
       const inv = inventoryMap.get(productId);
-      const available = inv.physicalQty - inv.reservedQty;
+      const available = availableQuantity(inv);
 
       if (available < needQty) {
         // Look up product code for the error message
@@ -134,6 +136,102 @@ export const confirmSalesOrder = async (orderId, userId) => {
 };
 
 /**
+ * Cancel a Sales Order — releases all reserved inventory atomically.
+ * Works for both CREATED (no reservations) and CONFIRMED (has reservations).
+ */
+export const cancelSalesOrder = async (orderId) => {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.salesOrder.findUnique({
+      where: { id: orderId },
+      include: { items: true, reservations: { where: { status: 'CONFIRMED' } } },
+    });
+
+    if (!order) throw httpError(404, 'Sales order not found', 'ORDER_NOT_FOUND');
+    if (!['CREATED', 'CONFIRMED'].includes(order.status)) {
+      throw httpError(409, `Cannot cancel order in status ${order.status}`, 'ORDER_NOT_CANCELLABLE');
+    }
+
+    // Release reserved inventory if order was CONFIRMED
+    if (order.status === 'CONFIRMED' && order.reservations.length > 0) {
+      // Aggregate qty to release per product
+      const release = new Map();
+      for (const r of order.reservations) {
+        release.set(r.productId, (release.get(r.productId) || 0) + r.quantity);
+      }
+
+      // Lock inventory rows in deterministic order
+      const sortedIds = [...release.keys()].sort();
+      for (const productId of sortedIds) {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT product_id FROM "inventory" WHERE "product_id" = ${productId} FOR UPDATE`
+        );
+      }
+
+      // Decrement reservedQty
+      for (const [productId, qty] of release) {
+        await tx.inventory.update({
+          where: { productId },
+          data: { reservedQty: { decrement: qty } },
+        });
+      }
+
+      // Mark reservations CANCELLED
+      await tx.reservation.updateMany({
+        where: { orderId, status: 'CONFIRMED' },
+        data: { status: 'CANCELLED' },
+      });
+    }
+
+    return tx.salesOrder.update({
+      where: { id: orderId },
+      data: { status: 'CANCELLED' },
+      include: { items: { include: { product: true } }, customer: true },
+    });
+  }, {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    timeout: 15000,
+    maxWait: 5000,
+  });
+};
+
+export const setDamagedQuantity = async (productId, damagedQty) => {
+  return prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw(
+      Prisma.sql`SELECT "physical_qty" AS "physicalQty", "reserved_qty" AS "reservedQty"
+                 FROM "inventory" WHERE "product_id" = ${productId} FOR UPDATE`
+    );
+    if (rows.length === 0) throw httpError(404, 'Inventory not found', 'INVENTORY_NOT_FOUND');
+
+    const physicalQty = Number(rows[0].physicalQty);
+    const reservedQty = Number(rows[0].reservedQty);
+    if (damagedQty + reservedQty > physicalQty) {
+      throw httpError(409, 'Damaged quantity cannot exceed unreserved physical stock', 'DAMAGED_QTY_EXCEEDS_AVAILABLE', {
+        availableForDamage: physicalQty - reservedQty,
+      });
+    }
+
+    const inventory = await tx.inventory.update({
+      where: { productId },
+      data: { damagedQty },
+      include: { product: { select: { id: true, productCode: true, name: true, unit: true } } },
+    });
+    return {
+      productId,
+      productCode: inventory.product.productCode,
+      productName: inventory.product.name,
+      unit: inventory.product.unit,
+      physicalQty: inventory.physicalQty,
+      reservedQty: inventory.reservedQty,
+      damagedQty: inventory.damagedQty,
+      availableQty: availableQuantity(inventory),
+    };
+  }, {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    timeout: 15000,
+    maxWait: 5000,
+  });
+};
+/**
  * Get current stock levels (read-only, no lock).
  */
 export const getInventory = async (productId) => {
@@ -150,8 +248,8 @@ export const getInventory = async (productId) => {
     unit: inv.product.unit,
     physicalQty: inv.physicalQty,
     reservedQty: inv.reservedQty,
-    availableQty: inv.physicalQty - inv.reservedQty,
-    damagedQty: inv.damagedQty,
+    availableQty: availableQuantity(inv),
+    damagedQty: inv.damagedQty ?? 0,
   };
 };
 
@@ -167,7 +265,7 @@ export const listInventory = async () => {
     isActive: inv.product.isActive,
     physicalQty: inv.physicalQty,
     reservedQty: inv.reservedQty,
-    availableQty: inv.physicalQty - inv.reservedQty,
-    damagedQty: inv.damagedQty,
+    availableQty: availableQuantity(inv),
+    damagedQty: inv.damagedQty ?? 0,
   }));
 };

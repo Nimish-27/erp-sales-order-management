@@ -40,31 +40,38 @@ export const quotationRepository = {
   async generateQuotationNumber(tx) {
     const year = new Date().getFullYear();
     const prefix = `QT-${year}-`;
-    const last = await tx.quotation.findFirst({
-      where: { quotationNumber: { startsWith: prefix } },
-      orderBy: { quotationNumber: 'desc' },
-      select: { quotationNumber: true },
-    });
-    const seq = last ? parseInt(last.quotationNumber.split('-').pop(), 10) + 1 : 1;
+    // Lock the latest row to prevent concurrent reads from seeing the same sequence value
+    const rows = await tx.$queryRaw`
+      SELECT "quotation_number" FROM "quotations"
+      WHERE "quotation_number" LIKE ${prefix + '%'}
+      ORDER BY "quotation_number" DESC
+      LIMIT 1
+      FOR UPDATE`;
+    const seq = rows.length ? parseInt(rows[0].quotation_number.split('-').pop(), 10) + 1 : 1;
     return `${prefix}${String(seq).padStart(4, '0')}`;
   },
 
-  async findAll(filters = {}) {
+  async findAll(filters = {}, { skip = 0, limit = 20 } = {}) {
     const where = {};
     if (filters.customerId) where.customerId = filters.customerId;
     if (filters.enquiryId) where.enquiryId = filters.enquiryId;
     if (filters.status) where.status = filters.status;
-
-    return prisma.quotation.findMany({
-      where,
-      include: {
-        customer: { select: { id: true, companyName: true } },
-        enquiry: { select: { id: true, enquiryNumber: true } },
-        items: { include: { product: { select: { id: true, productCode: true, name: true, unit: true } } } },
-        order: { select: { id: true, orderNumber: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const [data, total] = await Promise.all([
+      prisma.quotation.findMany({
+        where,
+        include: {
+          customer: { select: { id: true, companyName: true } },
+          enquiry: { select: { id: true, enquiryNumber: true } },
+          items: { include: { product: { select: { id: true, productCode: true, name: true, unit: true } } } },
+          order: { select: { id: true, orderNumber: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.quotation.count({ where }),
+    ]);
+    return { data, total };
   },
 
   async findById(id) {

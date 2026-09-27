@@ -6,12 +6,7 @@ import { httpError } from '../shared/errors.js';
  * to req.user. Throws 401 on any failure — never leaks the specific reason.
  */
 export const authenticate = (req, _res, next) => {
-  const header = req.headers.authorization;
-  if (!header || !header.startsWith('Bearer ')) {
-    return next(httpError(401, 'Authentication required', 'AUTH_MISSING'));
-  }
-
-  const token = header.slice(7).trim();
+  const token = req.cookies?.token;
   if (!token) return next(httpError(401, 'Authentication required', 'AUTH_MISSING'));
 
   try {
@@ -23,7 +18,7 @@ export const authenticate = (req, _res, next) => {
     };
     next();
   } catch (err) {
-    next(err); // 401 from verifyToken
+    next(err);
   }
 };
 

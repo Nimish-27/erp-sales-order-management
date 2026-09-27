@@ -15,13 +15,16 @@ export const createEnquirySchema = z.object({
 export const updateEnquirySchema = z.object({
   requiredDate: z.string().datetime().optional().nullable(),
   notes: z.string().max(2000).optional(),
-  status: z.enum(['OPEN', 'QUOTED', 'CLOSED', 'CANCELLED']).optional(),
   items: z.array(
     z.object({
       productId: z.string().uuid(),
       quantity: z.number().int().positive(),
     })
   ).optional(),
+});
+
+export const enquiryStatusTransitionSchema = z.object({
+  status: z.enum(['CANCELLED', 'CLOSED']),
 });
 
 export const enquiryIdParam = z.object({

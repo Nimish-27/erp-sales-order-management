@@ -11,6 +11,24 @@ const orderIdParam = z.object({ id: z.string().uuid() });
 
 // Inventory views — all roles
 router.get('/',           authorize('ADMIN', 'SALES', 'WAREHOUSE', 'VIEWER'), asyncHandler(ctrl.listInventory));
+router.patch('/:productId/damaged', authorize('ADMIN'),
+  (req, _res, next) => {
+    const idResult = productIdParam.safeParse(req.params);
+    const bodyResult = z.object({ damagedQty: z.number().int().min(0).max(2147483647) }).safeParse(req.body);
+    if (!idResult.success || !bodyResult.success) {
+      return next({
+        status: 400,
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid damaged inventory update',
+        details: { params: idResult.error?.flatten(), body: bodyResult.error?.flatten() },
+      });
+    }
+    req.params = idResult.data;
+    req.body = bodyResult.data;
+    next();
+  },
+  asyncHandler(ctrl.updateDamagedQty)
+);
 router.get('/:productId', authorize('ADMIN', 'SALES', 'WAREHOUSE', 'VIEWER'),
   (req, _res, next) => {
     const r = productIdParam.safeParse(req.params);

@@ -3,7 +3,7 @@ import { app } from '../src/app.js';
 import { prisma } from '../src/config/db.js';
 
 describe('Inventory Reservation — Confirm Order', () => {
-  let adminToken, salesToken;
+  let adminCookie, salesCookie;
   let customerId, productId1, productId2, orderId;
 
   beforeAll(async () => {
@@ -45,22 +45,22 @@ describe('Inventory Reservation — Confirm Order', () => {
       ],
     });
 
-    adminToken = (await request(app).post('/api/auth/login').send({ email: 'admin@test.com', password: 'Password@123' })).body.data.token;
-    salesToken = (await request(app).post('/api/auth/login').send({ email: 'sales@test.com', password: 'Password@123' })).body.data.token;
+    adminCookie = (await request(app).post('/api/auth/login').send({ email: 'admin@test.com', password: 'Password@123' })).headers['set-cookie'][0].split(';')[0];
+    salesCookie = (await request(app).post('/api/auth/login').send({ email: 'sales@test.com', password: 'Password@123' })).headers['set-cookie'][0].split(';')[0];
 
     // Setup: enquiry → quote → accept → convert to order
-    const enq = await request(app).post('/api/enquiries').set('Authorization', `Bearer ${salesToken}`)
+    const enq = await request(app).post('/api/enquiries').set('Cookie', salesCookie)
       .send({ customerId, items: [{ productId: productId1, quantity: 5 }, { productId: productId2, quantity: 3 }] });
     const enqId = enq.body.data.id;
 
-    const qt = await request(app).post('/api/quotations').set('Authorization', `Bearer ${salesToken}`)
+    const qt = await request(app).post('/api/quotations').set('Cookie', salesCookie)
       .send({ enquiryId: enqId, items: [{ productId: productId1, quantity: 5 }, { productId: productId2, quantity: 3 }] });
     const qtId = qt.body.data.id;
 
-    await request(app).patch(`/api/quotations/${qtId}/status`).set('Authorization', `Bearer ${salesToken}`).send({ status: 'SENT' });
-    await request(app).patch(`/api/quotations/${qtId}/status`).set('Authorization', `Bearer ${salesToken}`).send({ status: 'ACCEPTED' });
+    await request(app).patch(`/api/quotations/${qtId}/status`).set('Cookie', salesCookie).send({ status: 'SENT' });
+    await request(app).patch(`/api/quotations/${qtId}/status`).set('Cookie', salesCookie).send({ status: 'ACCEPTED' });
 
-    const so = await request(app).post(`/api/quotations/${qtId}/convert`).set('Authorization', `Bearer ${salesToken}`);
+    const so = await request(app).post(`/api/orders/quotations/${qtId}/convert`).set('Cookie', salesCookie);
     orderId = so.body.data.id;
   });
 
@@ -68,10 +68,10 @@ describe('Inventory Reservation — Confirm Order', () => {
 
   // -------- HAPPY PATH --------
 
-  test('POST /api/inventory/orders/:id/confirm → reserves stock, sets CONFIRMED', async () => {
+  test('POST /api/orders/:id/confirm → reserves stock, sets CONFIRMED', async () => {
     const res = await request(app)
-      .post(`/api/inventory/orders/${orderId}/confirm`)
-      .set('Authorization', `Bearer ${adminToken}`);
+      .post(`/api/orders/${orderId}/confirm`)
+      .set('Cookie', adminCookie);
 
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('CONFIRMED');
@@ -90,7 +90,7 @@ describe('Inventory Reservation — Confirm Order', () => {
   test('GET /api/inventory → shows updated available quantities', async () => {
     const res = await request(app)
       .get('/api/inventory')
-      .set('Authorization', `Bearer ${adminToken}`);
+      .set('Cookie', adminCookie);
     expect(res.status).toBe(200);
 
     const p1 = res.body.data.find((i) => i.productId === productId1);
@@ -103,17 +103,17 @@ describe('Inventory Reservation — Confirm Order', () => {
 
   test('SALES cannot confirm order → 403', async () => {
     // Create a new order to test
-    const enq = await request(app).post('/api/enquiries').set('Authorization', `Bearer ${salesToken}`)
+    const enq = await request(app).post('/api/enquiries').set('Cookie', salesCookie)
       .send({ customerId, items: [{ productId: productId1, quantity: 1 }] });
-    const qt = await request(app).post('/api/quotations').set('Authorization', `Bearer ${salesToken}`)
+    const qt = await request(app).post('/api/quotations').set('Cookie', salesCookie)
       .send({ enquiryId: enq.body.data.id, items: [{ productId: productId1, quantity: 1 }] });
-    await request(app).patch(`/api/quotations/${qt.body.data.id}/status`).set('Authorization', `Bearer ${salesToken}`).send({ status: 'SENT' });
-    await request(app).patch(`/api/quotations/${qt.body.data.id}/status`).set('Authorization', `Bearer ${salesToken}`).send({ status: 'ACCEPTED' });
-    const so = await request(app).post(`/api/quotations/${qt.body.data.id}/convert`).set('Authorization', `Bearer ${salesToken}`);
+    await request(app).patch(`/api/quotations/${qt.body.data.id}/status`).set('Cookie', salesCookie).send({ status: 'SENT' });
+    await request(app).patch(`/api/quotations/${qt.body.data.id}/status`).set('Cookie', salesCookie).send({ status: 'ACCEPTED' });
+    const so = await request(app).post(`/api/orders/quotations/${qt.body.data.id}/convert`).set('Cookie', salesCookie);
 
     const res = await request(app)
-      .post(`/api/inventory/orders/${so.body.data.id}/confirm`)
-      .set('Authorization', `Bearer ${salesToken}`);
+      .post(`/api/orders/${so.body.data.id}/confirm`)
+      .set('Cookie', salesCookie);
     expect(res.status).toBe(403);
   });
 
@@ -122,20 +122,20 @@ describe('Inventory Reservation — Confirm Order', () => {
   test('Confirm order exceeding stock → 409 INSUFFICIENT_STOCK, no state change', async () => {
     // P2 has 3 physical, 3 reserved (from previous test) → 0 available
     // Create new order requesting 2 of P2 → should fail
-    const enq = await request(app).post('/api/enquiries').set('Authorization', `Bearer ${salesToken}`)
+    const enq = await request(app).post('/api/enquiries').set('Cookie', salesCookie)
       .send({ customerId, items: [{ productId: productId2, quantity: 2 }] });
-    const qt = await request(app).post('/api/quotations').set('Authorization', `Bearer ${salesToken}`)
+    const qt = await request(app).post('/api/quotations').set('Cookie', salesCookie)
       .send({ enquiryId: enq.body.data.id, items: [{ productId: productId2, quantity: 2 }] });
-    await request(app).patch(`/api/quotations/${qt.body.data.id}/status`).set('Authorization', `Bearer ${salesToken}`).send({ status: 'SENT' });
-    await request(app).patch(`/api/quotations/${qt.body.data.id}/status`).set('Authorization', `Bearer ${salesToken}`).send({ status: 'ACCEPTED' });
-    const so = await request(app).post(`/api/quotations/${qt.body.data.id}/convert`).set('Authorization', `Bearer ${salesToken}`);
+    await request(app).patch(`/api/quotations/${qt.body.data.id}/status`).set('Cookie', salesCookie).send({ status: 'SENT' });
+    await request(app).patch(`/api/quotations/${qt.body.data.id}/status`).set('Cookie', salesCookie).send({ status: 'ACCEPTED' });
+    const so = await request(app).post(`/api/orders/quotations/${qt.body.data.id}/convert`).set('Cookie', salesCookie);
 
     // Snapshot stock before failed attempt
     const invBefore = await prisma.inventory.findUnique({ where: { productId: productId2 } });
 
     const res = await request(app)
-      .post(`/api/inventory/orders/${so.body.data.id}/confirm`)
-      .set('Authorization', `Bearer ${adminToken}`);
+      .post(`/api/orders/${so.body.data.id}/confirm`)
+      .set('Cookie', adminCookie);
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('INSUFFICIENT_STOCK');
@@ -160,8 +160,8 @@ describe('Inventory Reservation — Confirm Order', () => {
 
   test('Confirming an already-CONFIRMED order → 409 ORDER_NOT_CONFIRMABLE', async () => {
     const res = await request(app)
-      .post(`/api/inventory/orders/${orderId}/confirm`)
-      .set('Authorization', `Bearer ${adminToken}`);
+      .post(`/api/orders/${orderId}/confirm`)
+      .set('Cookie', adminCookie);
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('ORDER_NOT_CONFIRMABLE');
   });
@@ -170,8 +170,8 @@ describe('Inventory Reservation — Confirm Order', () => {
 
   test('Invalid order ID format → 400', async () => {
     const res = await request(app)
-      .post('/api/inventory/orders/not-a-uuid/confirm')
-      .set('Authorization', `Bearer ${adminToken}`);
+      .post('/api/orders/not-a-uuid/confirm')
+      .set('Cookie', adminCookie);
     expect(res.status).toBe(400);
   });
 });

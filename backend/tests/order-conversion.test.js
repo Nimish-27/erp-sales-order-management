@@ -3,7 +3,7 @@ import { app } from '../src/app.js';
 import { prisma } from '../src/config/db.js';
 
 describe('Quotation → Sales Order Conversion', () => {
-  let adminToken, salesToken;
+  let adminCookie, salesCookie;
   let customerId, productId1, productId2, enquiryId, quotationId;
 
   beforeAll(async () => {
@@ -47,35 +47,35 @@ describe('Quotation → Sales Order Conversion', () => {
       ],
     });
 
-    adminToken = (await request(app).post('/api/auth/login').send({ email: 'admin@test.com', password: 'Password@123' })).body.data.token;
-    salesToken = (await request(app).post('/api/auth/login').send({ email: 'sales@test.com', password: 'Password@123' })).body.data.token;
+    adminCookie = (await request(app).post('/api/auth/login').send({ email: 'admin@test.com', password: 'Password@123' })).headers['set-cookie'][0].split(';')[0];
+    salesCookie = (await request(app).post('/api/auth/login').send({ email: 'sales@test.com', password: 'Password@123' })).headers['set-cookie'][0].split(';')[0];
 
     // Create enquiry + quotation + accept it
     const enquiry = await request(app)
       .post('/api/enquiries')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ customerId, items: [{ productId: productId1, quantity: 10 }, { productId: productId2, quantity: 5 }] });
     enquiryId = enquiry.body.data.id;
 
     const quote = await request(app)
       .post('/api/quotations')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ enquiryId, items: [{ productId: productId1, quantity: 10 }, { productId: productId2, quantity: 5 }] });
     quotationId = quote.body.data.id;
 
     // DRAFT → SENT → ACCEPTED
-    await request(app).patch(`/api/quotations/${quotationId}/status`).set('Authorization', `Bearer ${salesToken}`).send({ status: 'SENT' });
-    await request(app).patch(`/api/quotations/${quotationId}/status`).set('Authorization', `Bearer ${salesToken}`).send({ status: 'ACCEPTED' });
+    await request(app).patch(`/api/quotations/${quotationId}/status`).set('Cookie', salesCookie).send({ status: 'SENT' });
+    await request(app).patch(`/api/quotations/${quotationId}/status`).set('Cookie', salesCookie).send({ status: 'ACCEPTED' });
   });
 
   afterAll(async () => await prisma.$disconnect());
 
   // -------- CONVERSION TESTS --------
 
-  test('POST /api/quotations/:id/convert → 201 with copied items', async () => {
+  test('POST /api/orders/quotations/:id/convert → 201 with copied items', async () => {
     const res = await request(app)
-      .post(`/api/quotations/${quotationId}/convert`)
-      .set('Authorization', `Bearer ${salesToken}`);
+      .post(`/api/orders/quotations/${quotationId}/convert`)
+      .set('Cookie', salesCookie);
 
     expect(res.status).toBe(201);
     expect(res.body.data.orderNumber).toMatch(/^SO-\d{4}-\d{4}$/);
@@ -96,10 +96,10 @@ describe('Quotation → Sales Order Conversion', () => {
     expect(parseFloat(res.body.data.totalAmount)).toBeCloseTo(parseFloat(res.body.data.quotation.grandTotal), 2);
   });
 
-  test('POST /api/quotations/:id/convert (second time) → 409 ORDER_ALREADY_EXISTS', async () => {
+  test('POST /api/orders/quotations/:id/convert (second time) → 409 ORDER_ALREADY_EXISTS', async () => {
     const res = await request(app)
-      .post(`/api/quotations/${quotationId}/convert`)
-      .set('Authorization', `Bearer ${salesToken}`);
+      .post(`/api/orders/quotations/${quotationId}/convert`)
+      .set('Cookie', salesCookie);
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('ORDER_ALREADY_EXISTS');
@@ -110,19 +110,19 @@ describe('Quotation → Sales Order Conversion', () => {
     // Create a new enquiry + quotation (still DRAFT)
     const enquiry = await request(app)
       .post('/api/enquiries')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ customerId, items: [{ productId: productId1, quantity: 1 }] });
     const newEnqId = enquiry.body.data.id;
 
     const draftQuote = await request(app)
       .post('/api/quotations')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ enquiryId: newEnqId, items: [{ productId: productId1, quantity: 1 }] });
     const draftQuoteId = draftQuote.body.data.id;
 
     const res = await request(app)
-      .post(`/api/quotations/${draftQuoteId}/convert`)
-      .set('Authorization', `Bearer ${salesToken}`);
+      .post(`/api/orders/quotations/${draftQuoteId}/convert`)
+      .set('Cookie', salesCookie);
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('QUOTATION_NOT_ACCEPTED');
@@ -131,24 +131,24 @@ describe('Quotation → Sales Order Conversion', () => {
   test('Convert a SENT (not yet ACCEPTED) quotation → 409', async () => {
     const enquiry = await request(app)
       .post('/api/enquiries')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ customerId, items: [{ productId: productId1, quantity: 1 }] });
     const newEnqId = enquiry.body.data.id;
 
     const sentQuote = await request(app)
       .post('/api/quotations')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ enquiryId: newEnqId, items: [{ productId: productId1, quantity: 1 }] });
     const sentQuoteId = sentQuote.body.data.id;
 
     await request(app)
       .patch(`/api/quotations/${sentQuoteId}/status`)
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ status: 'SENT' });
 
     const res = await request(app)
-      .post(`/api/quotations/${sentQuoteId}/convert`)
-      .set('Authorization', `Bearer ${salesToken}`);
+      .post(`/api/orders/quotations/${sentQuoteId}/convert`)
+      .set('Cookie', salesCookie);
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('QUOTATION_NOT_ACCEPTED');
@@ -157,15 +157,15 @@ describe('Quotation → Sales Order Conversion', () => {
   test('Convert non-existent quotation → 404', async () => {
     const fakeId = '00000000-0000-0000-0000-000000000000';
     const res = await request(app)
-      .post(`/api/quotations/${fakeId}/convert`)
-      .set('Authorization', `Bearer ${salesToken}`);
+      .post(`/api/orders/quotations/${fakeId}/convert`)
+      .set('Cookie', salesCookie);
 
     expect(res.status).toBe(404);
     expect(res.body.code).toBe('QUOTATION_NOT_FOUND');
   });
 
   test('Convert without auth → 401', async () => {
-    const res = await request(app).post(`/api/quotations/${quotationId}/convert`);
+    const res = await request(app).post(`/api/orders/quotations/${quotationId}/convert`);
     expect(res.status).toBe(401);
   });
 
@@ -173,11 +173,11 @@ describe('Quotation → Sales Order Conversion', () => {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('Password@123', 12);
     await prisma.user.create({ data: { email: 'viewer@test.com', passwordHash: hash, role: 'VIEWER' } });
-    const viewerToken = (await request(app).post('/api/auth/login').send({ email: 'viewer@test.com', password: 'Password@123' })).body.data.token;
+    const viewerCookie = (await request(app).post('/api/auth/login').send({ email: 'viewer@test.com', password: 'Password@123' })).headers['set-cookie'][0].split(';')[0];
 
     const res = await request(app)
-      .post(`/api/quotations/${quotationId}/convert`)
-      .set('Authorization', `Bearer ${viewerToken}`);
+      .post(`/api/orders/quotations/${quotationId}/convert`)
+      .set('Cookie', viewerCookie);
     expect(res.status).toBe(403);
   });
 
@@ -201,31 +201,28 @@ describe('Quotation → Sales Order Conversion', () => {
 
   // -------- STATUS TRANSITIONS --------
 
-  test('PATCH /api/orders/:id/status CREATED→CONFIRMED → 200', async () => {
+  test('POST /api/orders/:id/confirm CREATED→CONFIRMED as ADMIN → 200', async () => {
     const order = await prisma.salesOrder.findUnique({ where: { quotationId } });
     const res = await request(app)
-      .patch(`/api/orders/${order.id}/status`)
-      .set('Authorization', `Bearer ${salesToken}`)
-      .send({ status: 'CONFIRMED' });
+      .post(`/api/orders/${order.id}/confirm`)
+      .set('Cookie', adminCookie);
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('CONFIRMED');
   });
 
-  test('PATCH /api/orders/:id/status CONFIRMED→CANCELLED by SALES → 403', async () => {
+  test('POST /api/orders/:id/cancel by SALES → 403', async () => {
     const order = await prisma.salesOrder.findFirst({ where: { status: 'CONFIRMED' } });
     const res = await request(app)
-      .patch(`/api/orders/${order.id}/status`)
-      .set('Authorization', `Bearer ${salesToken}`)
-      .send({ status: 'CANCELLED' });
+      .post(`/api/orders/${order.id}/cancel`)
+      .set('Cookie', salesCookie);
     expect(res.status).toBe(403);
   });
 
-  test('PATCH /api/orders/:id/status CONFIRMED→CANCELLED by ADMIN → 200', async () => {
+  test('POST /api/orders/:id/cancel by ADMIN → 200', async () => {
     const order = await prisma.salesOrder.findFirst({ where: { status: 'CONFIRMED' } });
     const res = await request(app)
-      .patch(`/api/orders/${order.id}/status`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ status: 'CANCELLED' });
+      .post(`/api/orders/${order.id}/cancel`)
+      .set('Cookie', adminCookie);
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('CANCELLED');
   });

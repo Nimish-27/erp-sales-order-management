@@ -6,8 +6,10 @@ export const Orders = () => {
   const { user } = useAuth();
   const canConfirm = user?.role === 'ADMIN';
   const canDispatch = user?.role === 'ADMIN';
+  const canManageInventory = user?.role === 'ADMIN';
   const [orders, setOrders] = useState([]);
   const [inventory, setInventory] = useState([]);
+  const [damagedEdits, setDamagedEdits] = useState({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -17,31 +19,45 @@ export const Orders = () => {
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [driverName, setDriverName] = useState('');
 
-  const load = async () => {
-    try {
-      const [{ data: oData }, { data: iData }] = await Promise.all([
-        api.listOrders(),
-        api.listInventory(),
-      ]);
-      setOrders(oData);
-      setInventory(iData);
-      const inventoryMap = new Map(iData.map((i) => [i.productId, i]));
-      window.__inventoryMap = inventoryMap;
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  useEffect(() => { load(); }, [refreshKey]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [{ data: oData }, { data: iData }] = await Promise.all([
+          api.listOrders(),
+          api.listInventory(),
+        ]);
+        setOrders(oData);
+        setInventory(iData);
+      } catch (err) {
+        setError(err.message);
+      }
+    })();
+  }, [refreshKey]);
 
   const inventoryMap = new Map(inventory.map((i) => [i.productId, i]));
+  const handleDamagedUpdate = async (productId) => {
+    setError(''); setSuccess('');
+    const damagedQty = Number(damagedEdits[productId] ?? inventoryMap.get(productId)?.damagedQty ?? 0);
+    if (!Number.isInteger(damagedQty) || damagedQty < 0) {
+      setError('Damaged quantity must be a non-negative whole number');
+      return;
+    }
+    try {
+      await api.updateDamagedQuantity(productId, damagedQty);
+      setSuccess('Damaged quantity updated');
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      const max = err.details?.availableForDamage;
+      setError(max === undefined ? err.message : `${err.message} (maximum: ${max})`);
+    }
+  };
 
   const handleConfirm = async (id) => {
     setError(''); setSuccess('');
     try {
       await api.confirmOrder(id);
       setSuccess('Order confirmed — stock reserved');
-      load();
+      setRefreshKey((k) => k + 1);
     } catch (err) {
       if (err.details?.failures) {
         const failList = err.details.failures
@@ -51,6 +67,17 @@ export const Orders = () => {
       } else {
         setError(err.message);
       }
+    }
+  };
+
+  const handleCancel = async (id) => {
+    setError(''); setSuccess('');
+    try {
+      await api.cancelOrder(id);
+      setSuccess('Order cancelled — reserved stock released');
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      setError(err.message);
     }
   };
 
@@ -65,7 +92,7 @@ export const Orders = () => {
       setSuccess('Order dispatched — stock decremented');
       setDispatchOrderId(null);
       setVehicleNumber(''); setDriverName('');
-      load();
+      setRefreshKey((k) => k + 1);
     } catch (err) {
       if (err.details?.failures) {
         const failList = err.details.failures
@@ -103,13 +130,16 @@ export const Orders = () => {
               <label>Vehicle Number</label>
               <input
                 value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)}
-                placeholder="MH-12-AB-1234"
+                placeholder="MH-12-AB-1234" minLength={3} maxLength={20}
+                pattern="[A-Za-z0-9][A-Za-z0-9 .-]*" title="Use letters, numbers, spaces, dots, or hyphens"
+                autoComplete="off" required
               />
             </div>
             <div className="form-row">
               <label>Driver Name</label>
               <input
                 value={driverName} onChange={(e) => setDriverName(e.target.value)}
+                minLength={2} maxLength={100} autoComplete="name" required
               />
             </div>
             <div className="flex">
@@ -192,12 +222,15 @@ export const Orders = () => {
                       {o.status === 'CONFIRMED' && canDispatch && (
                         <button onClick={() => setDispatchOrderId(o.id)}>Dispatch</button>
                       )}
-                      {o.status === 'DISPATCHED' && o.dispatches?.[0] && (
+                      {['CREATED', 'CONFIRMED'].includes(o.status) && canConfirm && (
+                        <button className="danger" onClick={() => handleCancel(o.id)}>Cancel</button>
+                      )}
+                      {o.status === 'DISPATCHED' && o.dispatch && (
                         <span style={{ fontSize: 12 }}>
-                          {o.dispatches[0].dispatchNumber}
+                          {o.dispatch.dispatchNumber}
                           <br />
-                          <span className={`badge ${o.dispatches[0].status}`}>
-                            {o.dispatches[0].status}
+                          <span className={`badge ${o.dispatch.status}`}>
+                            {o.dispatch.status}
                           </span>
                         </span>
                       )}
@@ -220,7 +253,9 @@ export const Orders = () => {
                 <th>Name</th>
                 <th>Physical</th>
                 <th>Reserved</th>
+                <th>Damaged</th>
                 <th>Available</th>
+                {canManageInventory && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -230,9 +265,21 @@ export const Orders = () => {
                   <td>{i.productName}</td>
                   <td>{i.physicalQty}</td>
                   <td>{i.reservedQty}</td>
+                  <td>{canManageInventory ? (
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      aria-label={`Damaged quantity for ${i.productName}`}
+                      value={damagedEdits[i.productId] ?? String(i.damagedQty ?? 0)}
+                      onChange={(event) => setDamagedEdits((current) => ({ ...current, [i.productId]: event.target.value }))}
+                      style={{ width: 90 }}
+                    />
+                  ) : (i.damagedQty ?? 0)}</td>
                   <td style={{ color: i.availableQty === 0 ? '#dc2626' : '#065f46', fontWeight: 600 }}>
                     {i.availableQty}
                   </td>
+                  {canManageInventory && <td><button onClick={() => handleDamagedUpdate(i.productId)}>Save</button></td>}
                 </tr>
               ))}
             </tbody>

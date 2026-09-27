@@ -15,3 +15,7 @@ export const getInventory = asyncHandler(async (req, res) => {
   const inv = await reservationService.getInventory(req.params.productId);
   res.json({ success: true, data: inv });
 });
+export const updateDamagedQty = asyncHandler(async (req, res) => {
+  const inventory = await reservationService.setDamagedQuantity(req.params.productId, req.body.damagedQty);
+  res.json({ success: true, data: inventory });
+});

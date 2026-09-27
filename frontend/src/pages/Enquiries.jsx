@@ -19,22 +19,22 @@ export const Enquiries = () => {
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState([{ productId: '', quantity: 1 }]);
 
-  const load = async () => {
-    try {
-      const [{ data: enqData }, { data: custData }, { data: prodData }] = await Promise.all([
-        api.listEnquiries(),
-        api.listCustomers().catch(() => ({ data: [] })),
-        api.listProducts().catch(() => ({ data: [] })),
-      ]);
-      setEnquiries(enqData);
-      setCustomers(custData);
-      setProducts(prodData);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  useEffect(() => { load(); }, [refreshKey]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [{ data: enqData }, { data: custData }, { data: prodData }] = await Promise.all([
+          api.listEnquiries(),
+          api.listCustomers().catch(() => ({ data: [] })),
+          api.listProducts().catch(() => ({ data: [] })),
+        ]);
+        setEnquiries(enqData);
+        setCustomers(custData);
+        setProducts(prodData);
+      } catch (err) {
+        setError(err.message);
+      }
+    })();
+  }, [refreshKey]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -56,7 +56,7 @@ export const Enquiries = () => {
       setItems([{ productId: '', quantity: 1 }]);
       setNotes('');
       setRequiredDate('');
-      load();
+      setRefreshKey((k) => k + 1);
     } catch (err) {
       setError(err.message);
     }

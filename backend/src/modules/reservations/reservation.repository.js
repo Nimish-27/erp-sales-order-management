@@ -9,7 +9,8 @@ export const lockInventoryForProduct = async (tx, productId) => {
   const rows = await tx.$queryRaw(
     Prisma.sql`SELECT "product_id" AS "productId",
                       "physical_qty" AS "physicalQty",
-                      "reserved_qty" AS "reservedQty"
+                      "reserved_qty" AS "reservedQty",
+                      "damaged_qty" AS "damagedQty"
                FROM "inventory"
                WHERE "product_id" = ${productId}
                FOR UPDATE`
@@ -40,6 +41,7 @@ export const lockInventoryForOrder = async (tx, productIds) => {
     inventoryMap.set(pid, {
       physicalQty: Number(row.physicalQty),
       reservedQty: Number(row.reservedQty),
+      damagedQty: Number(row.damagedQty ?? 0),
     });
   }
 

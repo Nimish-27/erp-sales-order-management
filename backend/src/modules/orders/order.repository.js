@@ -46,35 +46,41 @@ export const orderRepository = {
   async generateOrderNumber(tx) {
     const year = new Date().getFullYear();
     const prefix = `SO-${year}-`;
-    const last = await tx.salesOrder.findFirst({
-      where: { orderNumber: { startsWith: prefix } },
-      orderBy: { orderNumber: 'desc' },
-      select: { orderNumber: true },
-    });
-    const seq = last ? parseInt(last.orderNumber.split('-').pop(), 10) + 1 : 1;
+    const rows = await tx.$queryRaw`
+      SELECT "order_number" FROM "sales_orders"
+      WHERE "order_number" LIKE ${prefix + '%'}
+      ORDER BY "order_number" DESC
+      LIMIT 1
+      FOR UPDATE`;
+    const seq = rows.length ? parseInt(rows[0].order_number.split('-').pop(), 10) + 1 : 1;
     return `${prefix}${String(seq).padStart(4, '0')}`;
   },
 
-  async findAll(filters = {}) {
+  async findAll(filters = {}, { skip = 0, limit = 20 } = {}) {
     const where = {};
     if (filters.customerId) where.customerId = filters.customerId;
     if (filters.status) where.status = filters.status;
     if (filters.fromDate || filters.toDate) {
       where.orderDate = {};
-      if (filters.fromDate) where.orderDate.gte = new Date(filters.fromDate);
-      if (filters.toDate) where.orderDate.lte = new Date(filters.toDate);
+      if (filters.fromDate) where.orderDate.gte = filters.fromDate;
+      if (filters.toDate) where.orderDate.lte = filters.toDate;
     }
-
-    return prisma.salesOrder.findMany({
-      where,
-      include: {
-        customer: { select: { id: true, companyName: true } },
-        quotation: { select: { id: true, quotationNumber: true } },
-        items: { include: { product: { select: { id: true, productCode: true, name: true, unit: true } } } },
-        dispatches: { select: { id: true, dispatchNumber: true, status: true } },
-      },
-      orderBy: { orderDate: 'desc' },
-    });
+    const [data, total] = await Promise.all([
+      prisma.salesOrder.findMany({
+        where,
+        include: {
+          customer: { select: { id: true, companyName: true } },
+          quotation: { select: { id: true, quotationNumber: true } },
+          items: { include: { product: { select: { id: true, productCode: true, name: true, unit: true } } } },
+          dispatch: { select: { id: true, dispatchNumber: true, status: true } },
+        },
+        orderBy: { orderDate: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.salesOrder.count({ where }),
+    ]);
+    return { data, total };
   },
 
   async findById(id) {
@@ -84,7 +90,7 @@ export const orderRepository = {
         customer: true,
         quotation: { include: { items: { include: { product: true } } } },
         items: { include: { product: true } },
-        dispatches: { include: { items: { include: { product: true } } } },
+        dispatch: { include: { items: { include: { product: true } } } },
       },
     });
   },

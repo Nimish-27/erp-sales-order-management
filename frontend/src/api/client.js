@@ -1,18 +1,12 @@
 const BASE = '/api';
 
-export const getToken = () => localStorage.getItem('token');
-
-export const setToken = (token) => localStorage.setItem('token', token);
-export const clearToken = () => localStorage.removeItem('token');
-
 const request = async (path, options = {}) => {
   const headers = { 'Content-Type': 'application/json', ...options.headers };
-  const token = getToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers,
+    credentials: 'include', // send httpOnly cookie automatically
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
@@ -29,21 +23,32 @@ const request = async (path, options = {}) => {
   return data;
 };
 
+const requestAllPages = async (path) => {
+  const firstPage = await request(`${path}?page=1&limit=100`);
+  const allData = [...(firstPage.data ?? [])];
+  const totalPages = firstPage.pagination?.totalPages ?? 1;
+  for (let page = 2; page <= totalPages; page += 1) {
+    const result = await request(`${path}?page=${page}&limit=100`);
+    allData.push(...(result.data ?? []));
+  }
+  return { ...firstPage, data: allData };
+};
+
 export const api = {
   // Auth
-  login: (email, password) => request('/auth/login', { method: 'POST', body: { email, password } }),
-  register: (email, password, role) =>
-    request('/auth/register', { method: 'POST', body: { email, password, role } }),
-  me:    () => request('/auth/me'),
+  login:    (email, password) => request('/auth/login', { method: 'POST', body: { email, password } }),
+  logout:   () => request('/auth/logout', { method: 'POST' }),
+  register: (email, password, role) => request('/auth/register', { method: 'POST', body: { email, password, role } }),
+  me:       () => request('/auth/me'),
 
   // Enquiries
-  listEnquiries:   () => request('/enquiries'),
+  listEnquiries:   () => requestAllPages('/enquiries'),
   getEnquiry:      (id) => request(`/enquiries/${id}`),
   createEnquiry:   (data) => request('/enquiries', { method: 'POST', body: data }),
   updateEnquiry:   (id, data) => request(`/enquiries/${id}`, { method: 'PATCH', body: data }),
 
   // Quotations
-  listQuotations:  () => request('/quotations'),
+  listQuotations:  () => requestAllPages('/quotations'),
   getQuotation:    (id) => request(`/quotations/${id}`),
   createQuotation: (data) => request('/quotations', { method: 'POST', body: data }),
   updateQuotationStatus: (id, status) =>
@@ -55,11 +60,14 @@ export const api = {
   convertQuotationToOrder: (id) =>
     request(`/orders/quotations/${id}/convert`, { method: 'POST' }),
   confirmOrder:    (id) => request(`/orders/${id}/confirm`, { method: 'POST' }),
+  cancelOrder:     (id) => request(`/orders/${id}/cancel`, { method: 'POST' }),
   dispatchOrder:   (id, data) =>
     request(`/dispatches/sales-orders/${id}/dispatch`, { method: 'POST', body: data }),
 
   // Inventory
   listInventory:   () => request('/inventory'),
+  updateDamagedQuantity: (productId, damagedQty) =>
+    request(`/inventory/${productId}/damaged`, { method: 'PATCH', body: { damagedQty } }),
 
   // Master data (for dropdowns)
   listProducts:    () => request('/products'),

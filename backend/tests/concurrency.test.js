@@ -10,7 +10,7 @@ import { prisma } from '../src/config/db.js';
  * If the row lock works, this passes. If it doesn't, you'll see over-reservation.
  */
 describe('Inventory Concurrency Under Load', () => {
-  let adminToken, salesToken;
+  let adminCookie, salesCookie;
   let customerId, productId;
   const POOL_SIZE = 10;          // physical inventory
   const PER_ORDER = 2;            // each order requests 2
@@ -48,18 +48,18 @@ describe('Inventory Concurrency Under Load', () => {
       data: { productId, physicalQty: POOL_SIZE, reservedQty: 0 },
     });
 
-    adminToken = (await request(app).post('/api/auth/login').send({ email: 'admin@test.com', password: 'Password@123' })).body.data.token;
-    salesToken = (await request(app).post('/api/auth/login').send({ email: 'sales@test.com', password: 'Password@123' })).body.data.token;
+    adminCookie = (await request(app).post('/api/auth/login').send({ email: 'admin@test.com', password: 'Password@123' })).headers['set-cookie'][0].split(';')[0];
+    salesCookie = (await request(app).post('/api/auth/login').send({ email: 'sales@test.com', password: 'Password@123' })).headers['set-cookie'][0].split(';')[0];
 
     // Create NUM_ORDERS orders, each drawing PER_ORDER units
     for (let i = 0; i < NUM_ORDERS; i++) {
-      const enq = await request(app).post('/api/enquiries').set('Authorization', `Bearer ${salesToken}`)
+      const enq = await request(app).post('/api/enquiries').set('Cookie', salesCookie)
         .send({ customerId, items: [{ productId, quantity: PER_ORDER }] });
-      const qt = await request(app).post('/api/quotations').set('Authorization', `Bearer ${salesToken}`)
+      const qt = await request(app).post('/api/quotations').set('Cookie', salesCookie)
         .send({ enquiryId: enq.body.data.id, items: [{ productId, quantity: PER_ORDER }] });
-      await request(app).patch(`/api/quotations/${qt.body.data.id}/status`).set('Authorization', `Bearer ${salesToken}`).send({ status: 'SENT' });
-      await request(app).patch(`/api/quotations/${qt.body.data.id}/status`).set('Authorization', `Bearer ${salesToken}`).send({ status: 'ACCEPTED' });
-      const so = await request(app).post(`/api/quotations/${qt.body.data.id}/convert`).set('Authorization', `Bearer ${salesToken}`);
+      await request(app).patch(`/api/quotations/${qt.body.data.id}/status`).set('Cookie', salesCookie).send({ status: 'SENT' });
+      await request(app).patch(`/api/quotations/${qt.body.data.id}/status`).set('Cookie', salesCookie).send({ status: 'ACCEPTED' });
+      const so = await request(app).post(`/api/orders/quotations/${qt.body.data.id}/convert`).set('Cookie', salesCookie);
       orderIds.push(so.body.data.id);
     }
   });
@@ -70,8 +70,8 @@ describe('Inventory Concurrency Under Load', () => {
     // Fire all confirm requests in parallel — no await between them
     const promises = orderIds.map((id) =>
       request(app)
-        .post(`/api/inventory/orders/${id}/confirm`)
-        .set('Authorization', `Bearer ${adminToken}`)
+        .post(`/api/orders/${id}/confirm`)
+        .set('Cookie', adminCookie)
     );
 
     const results = await Promise.all(promises);

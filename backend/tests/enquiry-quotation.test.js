@@ -4,7 +4,7 @@ import { prisma } from '../src/config/db.js';
 import { Decimal } from 'decimal.js';
 
 describe('Enquiry → Quotation Flow', () => {
-  let adminToken, salesToken;
+  let adminCookie, salesCookie;
   let customerId, productId1, productId2;
 
   beforeAll(async () => {
@@ -48,9 +48,9 @@ describe('Enquiry → Quotation Flow', () => {
     });
 
     const adminLogin = await request(app).post('/api/auth/login').send({ email: 'admin@test.com', password: 'Password@123' });
-    adminToken = adminLogin.body.data.token;
+    adminCookie = adminLogin.headers['set-cookie'][0].split(';')[0];
     const salesLogin = await request(app).post('/api/auth/login').send({ email: 'sales@test.com', password: 'Password@123' });
-    salesToken = salesLogin.body.data.token;
+    salesCookie = salesLogin.headers['set-cookie'][0].split(';')[0];
   });
 
   afterAll(async () => await prisma.$disconnect());
@@ -59,7 +59,7 @@ describe('Enquiry → Quotation Flow', () => {
   test('POST /api/enquiries → 201 with auto-generated number', async () => {
     const res = await request(app)
       .post('/api/enquiries')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({
         customerId,
         requiredDate: new Date(Date.now() + 86400000).toISOString(),
@@ -74,7 +74,7 @@ describe('Enquiry → Quotation Flow', () => {
   test('GET /api/enquiries → list with filters', async () => {
     const res = await request(app)
       .get('/api/enquiries')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .query({ customerId });
     expect(res.status).toBe(200);
     expect(res.body.data.length).toBeGreaterThan(0);
@@ -83,13 +83,13 @@ describe('Enquiry → Quotation Flow', () => {
   test('PATCH /api/enquiries/:id → update items & status', async () => {
     const create = await request(app)
       .post('/api/enquiries')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ customerId, items: [{ productId: productId1, quantity: 5 }] });
     const id = create.body.data.id;
 
     const res = await request(app)
       .patch(`/api/enquiries/${id}`)
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ status: 'CLOSED', items: [{ productId: productId2, quantity: 3 }] });
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('CLOSED');
@@ -102,7 +102,7 @@ describe('Enquiry → Quotation Flow', () => {
   beforeAll(async () => {
     const res = await request(app)
       .post('/api/enquiries')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ customerId, items: [{ productId: productId1, quantity: 10 }, { productId: productId2, quantity: 5 }] });
     enquiryId = res.body.data.id;
   });
@@ -110,7 +110,7 @@ describe('Enquiry → Quotation Flow', () => {
   test('POST /api/quotations (no items provided) → auto-derives from enquiry with server-side calc', async () => {
     const res = await request(app)
       .post('/api/quotations')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ enquiryId, validUntil: new Date(Date.now() + 30 * 86400000).toISOString() });
     expect(res.status).toBe(201);
     expect(res.body.data.quotationNumber).toMatch(/^QT-\d{4}-\d{4}$/);
@@ -127,7 +127,7 @@ describe('Enquiry → Quotation Flow', () => {
   test('POST /api/quotations (with items) → uses provided prices, still recomputes', async () => {
     const res = await request(app)
       .post('/api/quotations')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({
         enquiryId,
         items: [
@@ -143,13 +143,13 @@ describe('Enquiry → Quotation Flow', () => {
   test('PATCH /api/quotations/:id/status DRAFT→SENT → 200', async () => {
     const create = await request(app)
       .post('/api/quotations')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ enquiryId, items: [{ productId: productId1, quantity: 1 }] });
     const qId = create.body.data.id;
 
     const res = await request(app)
       .patch(`/api/quotations/${qId}/status`)
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ status: 'SENT' });
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('SENT');
@@ -158,18 +158,18 @@ describe('Enquiry → Quotation Flow', () => {
   test('PATCH /api/quotations/:id/status SENT→ACCEPTED → 200', async () => {
     const create = await request(app)
       .post('/api/quotations')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ enquiryId, items: [{ productId: productId1, quantity: 1 }] });
     const qId = create.body.data.id;
 
     await request(app)
       .patch(`/api/quotations/${qId}/status`)
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ status: 'SENT' });
 
     const res = await request(app)
       .patch(`/api/quotations/${qId}/status`)
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ status: 'ACCEPTED' });
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('ACCEPTED');
@@ -178,13 +178,13 @@ describe('Enquiry → Quotation Flow', () => {
   test('PATCH /api/quotations/:id/status DRAFT→ACCEPTED directly → 409 (illegal jump)', async () => {
     const create = await request(app)
       .post('/api/quotations')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ enquiryId, items: [{ productId: productId1, quantity: 1 }] });
     const qId = create.body.data.id;
 
     const res = await request(app)
       .patch(`/api/quotations/${qId}/status`)
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ status: 'ACCEPTED' });
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('INVALID_TRANSITION');
@@ -193,18 +193,18 @@ describe('Enquiry → Quotation Flow', () => {
   test('PATCH /api/quotations/:id/status SENT→REJECTED → 200', async () => {
     const create = await request(app)
       .post('/api/quotations')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ enquiryId, items: [{ productId: productId1, quantity: 1 }] });
     const qId = create.body.data.id;
 
     await request(app)
       .patch(`/api/quotations/${qId}/status`)
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ status: 'SENT' });
 
     const res = await request(app)
       .patch(`/api/quotations/${qId}/status`)
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ status: 'REJECTED' });
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('REJECTED');
@@ -213,22 +213,22 @@ describe('Enquiry → Quotation Flow', () => {
   test('DELETE /api/quotations/:id (ACCEPTED with no order) → 204', async () => {
     const create = await request(app)
       .post('/api/quotations')
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ enquiryId, items: [{ productId: productId1, quantity: 1 }] });
     const qId = create.body.data.id;
 
     await request(app)
       .patch(`/api/quotations/${qId}/status`)
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ status: 'SENT' });
     await request(app)
       .patch(`/api/quotations/${qId}/status`)
-      .set('Authorization', `Bearer ${salesToken}`)
+      .set('Cookie', salesCookie)
       .send({ status: 'ACCEPTED' });
 
     const res = await request(app)
-      .delete(`/api/quotations/${qId}`)
-      .set('Authorization', `Bearer ${adminToken}`);
+      .delete(`/api/orders/quotations/${qId}`)
+      .set('Cookie', adminCookie);
     expect(res.status).toBe(204);
   });
 
@@ -238,16 +238,16 @@ describe('Enquiry → Quotation Flow', () => {
     const hash = await bcrypt.hash('Password@123', 12);
     await prisma.user.create({ data: { email: 'viewer@test.com', passwordHash: hash, role: 'VIEWER' } });
     const login = await request(app).post('/api/auth/login').send({ email: 'viewer@test.com', password: 'Password@123' });
-    const viewerToken = login.body.data.token;
+    const viewerCookie = login.headers['set-cookie'][0].split(';')[0];
 
     // Can read
-    const getRes = await request(app).get('/api/enquiries').set('Authorization', `Bearer ${viewerToken}`);
+    const getRes = await request(app).get('/api/enquiries').set('Cookie', viewerCookie);
     expect(getRes.status).toBe(200);
 
     // Cannot create
     const postRes = await request(app)
       .post('/api/enquiries')
-      .set('Authorization', `Bearer ${viewerToken}`)
+      .set('Cookie', viewerCookie)
       .send({ customerId, items: [{ productId: productId1, quantity: 1 }] });
     expect(postRes.status).toBe(403);
   });

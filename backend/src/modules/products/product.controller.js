@@ -1,21 +1,21 @@
 import { prisma } from '../../config/db.js';
 import { httpError } from '../../shared/errors.js';
+import { parsePagination, paginatedResponse } from '../../shared/pagination.js';
 
-export const list = async (_req, res) => {
-	const products = await prisma.product.findMany({
-		where: { isActive: true },
-		orderBy: { productCode: 'asc' },
-		select: {
-			id: true,
-			productCode: true,
-			name: true,
-			category: true,
-			unit: true,
-			basePrice: true,
-			gstPercent: true,
-		},
-	});
-	res.json({ success: true, data: products });
+export const list = async (req, res) => {
+	const { page, limit, skip } = parsePagination(req.query);
+	const where = { isActive: true };
+	const [products, total] = await Promise.all([
+		prisma.product.findMany({
+			where,
+			orderBy: { productCode: 'asc' },
+			skip,
+			take: limit,
+			select: { id: true, productCode: true, name: true, category: true, unit: true, basePrice: true, gstPercent: true },
+		}),
+		prisma.product.count({ where }),
+	]);
+	res.json({ success: true, ...paginatedResponse(products, total, page, limit) });
 };
 export const getById = async (req, res) => {
 	const product = await prisma.product.findUnique({ where: { id: req.params.id } });
